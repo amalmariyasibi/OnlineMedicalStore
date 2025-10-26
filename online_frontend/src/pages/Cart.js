@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useCart } from "../contexts/CartContext";
+import { useCart } from "../contexts/CartContextSimple";
 
 function Cart() {
   const { 
@@ -96,9 +96,13 @@ function Cart() {
                     <div key={item.id} className="py-6 flex">
                       <div className="flex-shrink-0 w-24 h-24 border border-gray-200 rounded-md overflow-hidden">
                         <img
-                          src={item.imageUrl || "https://via.placeholder.com/96x96?text=No+Image"}
+                          src={item.imageUrl || "https://placehold.co/96x96?text=No+Image"}
                           alt={item.name}
                           className="w-full h-full object-center object-cover"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = "https://placehold.co/96x96?text=No+Image";
+                          }}
                         />
                       </div>
                       

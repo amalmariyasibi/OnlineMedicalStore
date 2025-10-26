@@ -1,37 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getProductById } from "../firebase";
+import { useCart } from "../contexts/CartContextSimple";
 
 function ProductDetail() {
   const { productId } = useParams();
   const navigate = useNavigate();
+  const { addToCart, loading: cartLoading, error: cartError } = useCart();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState("description"); // "description", "features", "reviews"
-
-  useEffect(() => {
-    const fetchProduct = async () => {
-      try {
-        setLoading(true);
-        const result = await getProductById(productId);
-        
-        if (result.success) {
-          setProduct(result.product);
-          setError("");
-        } else {
-          setError(result.error || "Failed to load product");
-        }
-      } catch (err) {
-        setError(err.message || "An error occurred");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProduct();
-  }, [productId]);
 
   const handleQuantityChange = (e) => {
     const value = parseInt(e.target.value);
@@ -40,9 +20,18 @@ function ProductDetail() {
     }
   };
 
-  const handleAddToCart = () => {
-    // This will be implemented when we build the cart functionality
-    alert(`Added ${quantity} of ${product.name} to cart`);
+  const handleAddToCart = async () => {
+    try {
+      const ok = await addToCart(product.id, quantity);
+      if (ok) {
+        navigate("/cart");
+      } else {
+        // Error is already handled by CartContext, just log it
+        console.log("Failed to add to cart");
+      }
+    } catch (error) {
+      console.error("Error adding to cart:", error);
+    }
   };
 
   if (loading) {
@@ -111,9 +100,13 @@ function ProductDetail() {
           <div className="flex flex-col-reverse">
             <div className="mt-6 w-full aspect-w-1 aspect-h-1 rounded-lg overflow-hidden lg:mt-0 border border-gray-200 shadow-sm">
               <img
-                src={product.imageUrl || "https://via.placeholder.com/600x600?text=No+Image"}
+                src={product.imageUrl || "https://placehold.co/600x600?text=No+Image"}
                 alt={product.name}
                 className="w-full h-full object-center object-cover"
+                onError={(e) => {
+                  e.currentTarget.onerror = null; // Prevent infinite loop
+                  e.currentTarget.src = "https://placehold.co/600x600?text=No+Image";
+                }}
               />
             </div>
           </div>
@@ -170,6 +163,22 @@ function ProductDetail() {
               <p className="text-base text-gray-500">{product.shortDescription || product.description?.substring(0, 150)}</p>
             </div>
 
+            {/* Cart Error Display */}
+            {cartError && (
+              <div className="mt-4 bg-red-50 border-l-4 border-red-400 p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{cartError}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Add to cart */}
             {product.stockQuantity > 0 && (
               <div className="mt-8">
@@ -189,13 +198,42 @@ function ProductDetail() {
                   />
                 </div>
                 
-                <div className="mt-4 flex">
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     type="button"
-                    className="w-full bg-blue-600 border border-transparent rounded-md py-3 px-8 flex items-center justify-center text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    className="w-full bg-blue-600 border border-transparent rounded-md py-3 px-8 flex items-center justify-center text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={handleAddToCart}
+                    disabled={cartLoading}
                   >
-                    Add to Cart
+                    {cartLoading ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Adding...
+                      </>
+                    ) : (
+                      'Add to Cart'
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full bg-green-600 border border-transparent rounded-md py-3 px-8 flex items-center justify-center text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    onClick={() => {
+                      const buyNowItem = {
+                        id: product.id,
+                        name: product.name,
+                        price: product.price,
+                        quantity,
+                        category: product.category,
+                        requiresPrescription: product.requiresPrescription || false,
+                        imageUrl: product.imageUrl || "",
+                      };
+                      navigate("/checkout", { state: { buyNowItem } });
+                    }}
+                  >
+                    Buy Now
                   </button>
                 </div>
               </div>

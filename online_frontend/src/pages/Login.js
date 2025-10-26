@@ -17,11 +17,33 @@ function Login() {
     setPassword(e.target.value);
   };
 
+  const validateForm = () => {
+    // Email validation
+    if (!email) {
+      setError("Email is required");
+      return false;
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      setError("Please enter a valid email address");
+      return false;
+    }
+    
+    // Password validation
+    if (!password) {
+      setError("Password is required");
+      return false;
+    } else if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return false;
+    }
+    
+    return true;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!email || !password) {
-      setError("Please enter both email and password");
+    // Validate form
+    if (!validateForm()) {
       return;
     }
     
@@ -50,11 +72,35 @@ function Login() {
           navigate("/");
         }
       } else {
-        setError(result.error || "Invalid email or password");
+        // Provide more specific error messages based on Firebase error codes
+        if (result.error && result.error.includes("user-not-found")) {
+          setError("No account found with this email. Please check your email or sign up.");
+        } else if (result.error && result.error.includes("wrong-password")) {
+          setError("Incorrect password. Please try again or reset your password.");
+        } else if (result.error && result.error.includes("too-many-requests")) {
+          setError("Too many failed login attempts. Please try again later or reset your password.");
+        } else if (result.error && result.error.includes("user-disabled")) {
+          setError("This account has been disabled. Please contact support.");
+        } else {
+          setError(result.error || "Invalid email or password");
+        }
       }
     } catch (err) {
       console.error("Login error:", err);
-      setError(err.message || "An error occurred during login");
+      // Handle specific error codes
+      if (err.code === 'auth/user-not-found') {
+        setError("No account found with this email. Please check your email or sign up.");
+      } else if (err.code === 'auth/wrong-password') {
+        setError("Incorrect password. Please try again or reset your password.");
+      } else if (err.code === 'auth/too-many-requests') {
+        setError("Too many failed login attempts. Please try again later or reset your password.");
+      } else if (err.code === 'auth/user-disabled') {
+        setError("This account has been disabled. Please contact support.");
+      } else if (err.code === 'auth/invalid-email') {
+        setError("Invalid email format. Please enter a valid email address.");
+      } else {
+        setError(err.message || "An error occurred during login");
+      }
     } finally {
       setIsLoading(false);
     }

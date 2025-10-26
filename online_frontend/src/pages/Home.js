@@ -2,10 +2,13 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { seedDatabase } from "../seedData";
 import { useAuth } from "../contexts/AuthContext";
+import { addAllDummyProducts, addSingleDummyProduct } from "../utils/addDummyProducts";
 
 function Home() {
   const [seeding, setSeeding] = useState(false);
   const [seedMessage, setSeedMessage] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addMessage, setAddMessage] = useState("");
   const { currentUser } = useAuth();
 
   // Function to handle database seeding
@@ -26,6 +29,41 @@ function Home() {
       setSeedMessage(`Error: ${error.message || "Unknown error occurred"}`);
     } finally {
       setSeeding(false);
+    }
+  };
+
+  // Handlers to add dummy products
+  const handleAddSingleProduct = async () => {
+    try {
+      setAdding(true);
+      setAddMessage("Adding a sample product...");
+      const result = await addSingleDummyProduct(0);
+      if (result.success) {
+        setAddMessage("Added: Digital Thermometer. Go to Products to view it.");
+      } else {
+        setAddMessage(`Error: ${result.error || "Failed to add product"}`);
+      }
+    } catch (err) {
+      console.error("Error adding single product:", err);
+      setAddMessage(`Error: ${err.message || "Failed to add product"}`);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleAddAllProducts = async () => {
+    try {
+      setAdding(true);
+      setAddMessage("Adding sample products (about 12 items)...");
+      const results = await addAllDummyProducts();
+      const ok = results.filter(r => r.success).length;
+      const fail = results.filter(r => !r.success).length;
+      setAddMessage(`Added ${ok} products${fail ? `, ${fail} failed` : ""}. Go to Products to view them.`);
+    } catch (err) {
+      console.error("Error adding all products:", err);
+      setAddMessage(`Error: ${err.message || "Failed to add products"}`);
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -206,19 +244,44 @@ function Home() {
             <p className="mb-4 text-gray-600">
               Add sample products and medicines to the database for testing purposes.
             </p>
-            <button
-              onClick={handleSeedDatabase}
-              disabled={seeding}
-              className={`${
-                seeding ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
-              } text-white px-6 py-2 rounded-lg font-semibold transition duration-300`}
-            >
-              {seeding ? "Seeding..." : "Seed Database with Test Data"}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                onClick={handleSeedDatabase}
+                disabled={seeding}
+                className={`${
+                  seeding ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
+                } text-white px-6 py-2 rounded-lg font-semibold transition duration-300`}
+              >
+                {seeding ? "Seeding..." : "Seed Medicines (demo)"}
+              </button>
+              <button
+                onClick={handleAddSingleProduct}
+                disabled={adding}
+                className={`${
+                  adding ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
+                } text-white px-6 py-2 rounded-lg font-semibold transition duration-300`}
+              >
+                {adding ? "Adding..." : "Add 1 Dummy Product"}
+              </button>
+              <button
+                onClick={handleAddAllProducts}
+                disabled={adding}
+                className={`${
+                  adding ? "bg-gray-400" : "bg-indigo-600 hover:bg-indigo-700"
+                } text-white px-6 py-2 rounded-lg font-semibold transition duration-300`}
+              >
+                {adding ? "Adding..." : "Add 12 Dummy Products"}
+              </button>
+            </div>
             
             {seedMessage && (
               <div className={`mt-4 p-3 rounded-lg ${seedMessage.includes("Error") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
                 {seedMessage}
+              </div>
+            )}
+            {addMessage && (
+              <div className={`mt-2 p-3 rounded-lg ${addMessage.includes("Error") ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
+                {addMessage}
               </div>
             )}
           </div>

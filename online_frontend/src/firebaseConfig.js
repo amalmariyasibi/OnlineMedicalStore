@@ -24,7 +24,26 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Enable offline persistence
+// Add global error handler for Firestore
+window.addEventListener('unhandledrejection', (event) => {
+  if (event.reason && event.reason.message && event.reason.message.includes('FIRESTORE')) {
+    console.warn('Firestore error caught and handled:', event.reason.message);
+    event.preventDefault(); // Prevent the error from crashing the app
+  }
+});
+
+// Add error boundary for Firestore internal errors
+window.addEventListener('error', (event) => {
+  if (event.message && event.message.includes('INTERNAL ASSERTION FAILED')) {
+    console.warn('Firestore internal assertion error caught and handled');
+    event.preventDefault();
+    return false;
+  }
+});
+
+// Offline persistence disabled for development to avoid multi-tab conflicts
+// Enable offline persistence (commented out for development)
+/*
 try {
   enableIndexedDbPersistence(db, {cacheSizeBytes: CACHE_SIZE_UNLIMITED})
     .then(() => {
@@ -43,5 +62,8 @@ try {
 } catch (error) {
   console.error("Error setting up persistence:", error);
 }
+*/
+
+console.log("Firebase initialized without offline persistence (development mode)");
 
 export { app, auth, db, storage };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { 
   getCurrentUser, 
   isAuthenticated,
@@ -8,7 +8,9 @@ import {
   deleteUser,
   getUserData,
   getAllOrders,
+  onOrdersUpdate,
   updateOrderStatus,
+  assignDeliveryPerson,
   getAllPrescriptions,
   updatePrescriptionStatus,
   deletePrescription,
@@ -17,9 +19,13 @@ import {
   resetSystemSettings
 } from "../firebase";
 import { seedOrders } from "../seedOrders";
+import AddDummyProducts from "../components/AddDummyProducts";
+import LiveCartActivity from "../components/LiveCartActivity";
+import AdminProducts from "./AdminProducts";
 
 function AdminDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [users, setUsers] = useState([]);
@@ -34,11 +40,13 @@ function AdminDashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isOrderStatusModalOpen, setIsOrderStatusModalOpen] = useState(false);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState("");
   const [selectedOrderStatus, setSelectedOrderStatus] = useState("");
   const [updatingUser, setUpdatingUser] = useState(false);
   const [updatingOrder, setUpdatingOrder] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedDeliveryPersonId, setSelectedDeliveryPersonId] = useState("");
   
   // Prescription management states
   const [prescriptions, setPrescriptions] = useState([]);
@@ -82,6 +90,16 @@ function AdminDashboard() {
           return;
         }
         
+        // If URL has tab query, switch to that tab
+        try {
+          const qp = new URLSearchParams(location.search);
+          const tab = qp.get("tab");
+          const allowed = ["overview","users","orders","prescriptions","reports","settings"];
+          if (tab && allowed.includes(tab)) {
+            setActiveTab(tab);
+          }
+        } catch (e) {}
+
         // Load all users
         loadUsers();
         
@@ -93,7 +111,7 @@ function AdminDashboard() {
     };
     
     checkAuth();
-  }, [navigate]);
+  }, [navigate, location.search]);
   
   // Load orders when status filter changes
   useEffect(() => {
@@ -169,6 +187,36 @@ function AdminDashboard() {
     }
   };
   
+  // Set up real-time listener for orders
+  const [ordersUnsubscribe, setOrdersUnsubscribe] = useState(null);
+  
+  useEffect(() => {
+    // Clean up previous listener if it exists
+    if (ordersUnsubscribe) {
+      ordersUnsubscribe();
+    }
+    
+    // Set up new listener with current filters
+    const filters = statusFilter !== "all" ? { status: statusFilter } : {};
+    const unsubscribe = onOrdersUpdate(filters, (result) => {
+      if (result.success) {
+        setOrders(result.orders);
+      } else {
+        setError(result.error || "Failed to load orders");
+      }
+      setLoading(false);
+    });
+    
+    setOrdersUnsubscribe(unsubscribe);
+    
+    // Clean up listener on unmount
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [statusFilter]);
+  
   // Handle order status update
   const handleOrderStatusUpdate = async () => {
     if (!selectedOrder || !selectedOrderStatus) return;
@@ -195,6 +243,40 @@ function AdminDashboard() {
       }
     } catch (err) {
       setError(err.message || "An error occurred");
+    } finally {
+      setUpdatingOrder(false);
+    }
+  };
+
+  // Assign delivery person to order
+  const handleAssignDelivery = async () => {
+    if (!selectedOrder || !selectedDeliveryPersonId) return;
+    setUpdatingOrder(true);
+    setError("");
+    setSuccess("");
+    try {
+      const result = await assignDeliveryPerson(selectedOrder.id, selectedDeliveryPersonId);
+      if (result.success) {
+        setSuccess("Delivery person assigned successfully");
+        // Update local state
+        const deliveryUser = users.find(u => u.uid === selectedDeliveryPersonId);
+        setOrders(orders.map(order => 
+          order.id === selectedOrder.id
+            ? {
+                ...order,
+                deliveryPersonId: selectedDeliveryPersonId,
+                deliveryPersonName: deliveryUser?.displayName || deliveryUser?.email,
+                status: "Ready for Delivery",
+                updatedAt: new Date()
+              }
+            : order
+        ));
+        setIsAssignModalOpen(false);
+      } else {
+        setError(result.error || "Failed to assign delivery person");
+      }
+    } catch (err) {
+      setError(err.message || "An error occurred while assigning delivery person");
     } finally {
       setUpdatingOrder(false);
     }
@@ -545,10 +627,13 @@ function AdminDashboard() {
     }
   };
 
-  // Filter users based on search term
+  // Filter users based on search term and exclude admin users
   const filteredUsers = users.filter(user => 
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (user.displayName && user.displayName.toLowerCase().includes(searchTerm.toLowerCase()))
+    // Exclude users with admin role
+    user.role !== "admin" && (
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.displayName && user.displayName.toLowerCase().includes(searchTerm.toLowerCase()))
+    )
   );
   
   // Filter prescriptions based on search term
@@ -576,7 +661,7 @@ function AdminDashboard() {
               <p className="mt-1 max-w-2xl text-sm text-gray-500">Key metrics and system information</p>
             </div>
             <div className="px-6 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="bg-white overflow-hidden shadow rounded-lg">
                 <div className="p-5">
                   <div className="flex items-center">
@@ -606,7 +691,7 @@ function AdminDashboard() {
                     <div className="ml-5 w-0 flex-1">
                       <dl>
                         <dt className="text-sm font-medium text-gray-500 truncate">Total Orders</dt>
-                        <dd className="text-lg font-medium text-gray-900">0</dd>
+                        <dd className="text-lg font-medium text-gray-900">{orders.length}</dd>
                       </dl>
                     </div>
                   </div>
@@ -623,8 +708,10 @@ function AdminDashboard() {
                     </div>
                     <div className="ml-5 w-0 flex-1">
                       <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Total Products</dt>
-                        <dd className="text-lg font-medium text-gray-900">0</dd>
+                        <dt className="text-sm font-medium text-gray-500 truncate">Pending Orders</dt>
+                        <dd className="text-lg font-medium text-gray-900">
+                          {orders.filter(order => order.status === "pending").length}
+                        </dd>
                       </dl>
                     </div>
                   </div>
@@ -642,7 +729,9 @@ function AdminDashboard() {
                     <div className="ml-5 w-0 flex-1">
                       <dl>
                         <dt className="text-sm font-medium text-gray-500 truncate">Revenue</dt>
-                        <dd className="text-lg font-medium text-gray-900">₹0</dd>
+                        <dd className="text-lg font-medium text-gray-900">
+                          ₹{orders.reduce((total, order) => total + (order.totalAmount || order.total || 0), 0).toFixed(2)}
+                        </dd>
                       </dl>
                     </div>
                   </div>
@@ -651,14 +740,145 @@ function AdminDashboard() {
               </div>
               
               <div className="mt-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Activity</h3>
-                <div className="text-center py-8">
-                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No recent activity</h3>
-                  <p className="mt-1 text-sm text-gray-500">Get started by managing your users and products.</p>
+                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Orders</h3>
+                {orders.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Order ID
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Customer
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Date
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Total
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {orders.slice(0, 5).map((order) => (
+                          <tr key={order.id}>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">
+                                {order.orderId ? order.orderId.substring(0, 8) : order.id.substring(0, 8)}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">
+                                {order.customerName || 
+                                 (order.shippingAddress && order.shippingAddress.name) || 
+                                 "Guest User"}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">
+                                {order.createdAt ? 
+                                  (order.createdAt.seconds ? 
+                                    new Date(order.createdAt.seconds * 1000).toLocaleDateString() : 
+                                    new Date(order.createdAt).toLocaleDateString()
+                                  ) : "N/A"}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">₹{(order.totalAmount || order.total || 0).toFixed(2)}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                order.status === "delivered" 
+                                  ? "bg-green-100 text-green-800" 
+                                  : order.status === "shipped" 
+                                  ? "bg-blue-100 text-blue-800" 
+                                  : order.status === "processing" 
+                                  ? "bg-yellow-100 text-yellow-800" 
+                                  : order.status === "cancelled" 
+                                  ? "bg-red-100 text-red-800" 
+                                  : "bg-gray-100 text-gray-800"
+                              }`}>
+                                {order.status ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : "Pending"}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-gray-500">No recent orders</p>
+                  </div>
+                )}
+
+      {/* Assign Delivery Modal */}
+      {isAssignModalOpen && (
+        <div className="fixed z-10 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                      Assign Delivery Person
+                    </h3>
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-500 mb-4">
+                        Order: <span className="font-medium">{selectedOrder?.orderId ? selectedOrder.orderId.substring(0,8) : selectedOrder?.id?.substring(0,8)}</span>
+                      </p>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Select Delivery Person</label>
+                      <select
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        value={selectedDeliveryPersonId}
+                        onChange={(e)=>setSelectedDeliveryPersonId(e.target.value)}
+                      >
+                        <option value="">-- Choose --</option>
+                        {users
+                          .filter(u => u.role === "delivery" || u.role === "delivery boy" || u.role === "deliveryboy")
+                          .map(u => (
+                            <option key={u.uid} value={u.uid}>{u.displayName || u.email}</option>
+                          ))}
+                      </select>
+                      {selectedOrder?.deliveryPersonId && (
+                        <p className="mt-3 text-sm text-gray-600">Currently assigned to: <span className="font-medium">{selectedOrder.deliveryPersonName || selectedOrder.deliveryPersonId}</span></p>
+                      )}
+                    </div>
+                  </div>
                 </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm ${
+                    updatingOrder ? "opacity-70 cursor-not-allowed" : ""
+                  }`}
+                  onClick={handleAssignDelivery}
+                  disabled={updatingOrder || !selectedDeliveryPersonId}
+                >
+                  {updatingOrder ? "Assigning..." : "Assign"}
+                </button>
+                <button
+                  type="button"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={() => setIsAssignModalOpen(false)}
+                  disabled={updatingOrder}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
               </div>
             </div>
           </div>
@@ -853,6 +1073,8 @@ function AdminDashboard() {
                     <option value="pending">Pending</option>
                     <option value="processing">Processing</option>
                     <option value="shipped">Shipped</option>
+                    <option value="Ready for Delivery">Ready for Delivery</option>
+                    <option value="Out for Delivery">Out for Delivery</option>
                     <option value="delivered">Delivered</option>
                     <option value="cancelled">Cancelled</option>
                   </select>
@@ -950,18 +1172,17 @@ function AdminDashboard() {
                                   setSelectedOrderStatus(order.status || "pending");
                                   setIsOrderStatusModalOpen(true);
                                 }}
-                                className="text-blue-600 hover:text-blue-900 mr-4"
+                                className="text-blue-600 hover:text-blue-900"
                               >
                                 Update Status
                               </button>
                               <button
                                 onClick={() => {
-                                  // View order details (to be implemented)
-                                  console.log("View order details", order);
+                                  navigate(`/admin/orders/assign/${order.id}`);
                                 }}
-                                className="text-green-600 hover:text-green-900"
+                                className="ml-4 text-indigo-600 hover:text-indigo-900"
                               >
-                                View Details
+                                {order.deliveryPersonId ? "Reassign Delivery" : "Assign Delivery"}
                               </button>
                             </td>
                           </tr>
@@ -972,65 +1193,22 @@ function AdminDashboard() {
               ) : (
                 <div className="text-center py-8">
                   <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
                   <h3 className="mt-2 text-sm font-medium text-gray-900">No orders found</h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    {statusFilter !== "all" 
-                      ? `No ${statusFilter} orders found. Try changing the filter.` 
-                      : "No orders have been placed yet."}
-                  </p>
+                  <p className="mt-1 text-sm text-gray-500">Get started by adding sample orders.</p>
                 </div>
               )}
             </div>
           </div>
         );
         
-      case "products":
-        return (
-          <div>
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">Product Management</h3>
-              <p className="mt-1 max-w-2xl text-sm text-gray-500">Manage medicines and products</p>
-            </div>
-            <div className="px-6 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button
-                  onClick={() => navigate("/admin/products")}
-                  className="p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
-                >
-                  <div className="text-center">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">Manage Products</h3>
-                    <p className="mt-1 text-sm text-gray-500">Add, edit, and manage general products</p>
-                  </div>
-                </button>
-                
-                <button
-                  onClick={() => navigate("/admin/medicines")}
-                  className="p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
-                >
-                  <div className="text-center">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                    </svg>
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">Manage Medicines</h3>
-                    <p className="mt-1 text-sm text-gray-500">Add, edit, and manage medicines</p>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-        
       case "prescriptions":
         return (
-          <div>
+          <div className="space-y-6">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">Prescription Verification</h3>
-              <p className="mt-1 max-w-2xl text-sm text-gray-500">Review and verify prescription uploads</p>
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Prescription Management</h3>
+              <p className="mt-1 max-w-2xl text-sm text-gray-500">View and manage customer prescriptions</p>
             </div>
             
             {error && (
@@ -1046,49 +1224,22 @@ function AdminDashboard() {
             )}
             
             <div className="px-6 py-4">
-              <div className="flex flex-col md:flex-row justify-between mb-4">
-                <div className="mb-4 md:mb-0 md:w-1/3">
+              <div className="mb-4">
                   <input
                     type="text"
-                    placeholder="Search by customer name or email"
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    placeholder="Search prescriptions by user email or name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     value={prescriptionSearchTerm}
                     onChange={(e) => setPrescriptionSearchTerm(e.target.value)}
                   />
-                </div>
-                <div className="md:w-1/4">
-                  <select
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    value={prescriptionStatusFilter}
-                    onChange={(e) => setPrescriptionStatusFilter(e.target.value)}
-                  >
-                    <option value="all">All Statuses</option>
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
-                </div>
               </div>
               
-              {prescriptions.length === 0 ? (
-                <div className="text-center py-8">
-                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No Prescriptions Found</h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    {prescriptionStatusFilter !== "all" 
-                      ? `No ${prescriptionStatusFilter} prescriptions found.` 
-                      : "No prescriptions have been uploaded yet."}
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
+              <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          ID
+                          Prescription ID
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Customer
@@ -1105,65 +1256,86 @@ function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredPrescriptions.map((prescription) => (
-                        <tr key={prescription.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {prescription.id.substring(0, 8)}...
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">
-                              {prescription.user?.displayName || "Unknown User"}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {prescription.user?.email || "No email"}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {prescription.createdAt ? 
-                              (prescription.createdAt.seconds ? 
-                                new Date(prescription.createdAt.seconds * 1000).toLocaleString() : 
-                                new Date(prescription.createdAt).toLocaleString()
-                              ) : ""}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                              ${prescription.status === 'approved' ? 'bg-green-100 text-green-800' : 
-                                prescription.status === 'rejected' ? 'bg-red-100 text-red-800' : 
-                                'bg-yellow-100 text-yellow-800'}`}>
-                              {prescription.status ? 
-                                prescription.status.charAt(0).toUpperCase() + prescription.status.slice(1) : 
-                                "Pending"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button
-                              onClick={() => {
-                                setSelectedPrescription(prescription);
-                                setSelectedPrescriptionStatus(prescription.status || "pending");
-                                setPrescriptionNotes(prescription.notes || "");
-                                setIsPrescriptionModalOpen(true);
-                              }}
-                              className="text-indigo-600 hover:text-indigo-900 mr-4"
-                            >
-                              Review
-                            </button>
+                      {filteredPrescriptions.length > 0 ? (
+                        filteredPrescriptions.map((prescription) => (
+                          <tr key={prescription.id}>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">
+                                {prescription.id.substring(0, 8)}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">
+                                {prescription.user?.email || "No Email"}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {prescription.user?.displayName || "No Name"}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">
+                                {prescription.createdAt ? 
+                                  (prescription.createdAt.seconds ? 
+                                    new Date(prescription.createdAt.seconds * 1000).toLocaleDateString() : 
+                                    new Date(prescription.createdAt).toLocaleDateString()
+                                  ) : "N/A"}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {prescription.createdAt ? 
+                                  (prescription.createdAt.seconds ? 
+                                    new Date(prescription.createdAt.seconds * 1000).toLocaleTimeString() : 
+                                    new Date(prescription.createdAt).toLocaleTimeString()
+                                  ) : ""}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                prescription.status === "approved" 
+                                  ? "bg-green-100 text-green-800" 
+                                  : prescription.status === "pending" 
+                                  ? "bg-yellow-100 text-yellow-800" 
+                                  : prescription.status === "rejected" 
+                                  ? "bg-red-100 text-red-800" 
+                                  : "bg-gray-100 text-gray-800"
+                              }`}>
+                                {prescription.status ? prescription.status.charAt(0).toUpperCase() + prescription.status.slice(1) : "Pending"}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <button
+                                onClick={() => {
+                                  setSelectedPrescription(prescription);
+                                  setSelectedPrescriptionStatus(prescription.status || "pending");
+                                  setPrescriptionNotes(prescription.notes || "");
+                                  setIsPrescriptionModalOpen(true);
+                                }}
+                                className="text-blue-600 hover:text-blue-900"
+                              >
+                                Update Status
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
+                            No prescriptions found
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
-                </div>
-              )}
+              </div>
             </div>
           </div>
         );
         
       case "reports":
         return (
-          <div>
+          <div className="space-y-6">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg leading-6 font-medium text-gray-900">Reports & Analytics</h3>
-              <p className="mt-1 max-w-2xl text-sm text-gray-500">View sales reports and analytics</p>
+              <p className="mt-1 max-w-2xl text-sm text-gray-500">Generate and view reports</p>
             </div>
             
             {error && (
@@ -1172,250 +1344,217 @@ function AdminDashboard() {
               </div>
             )}
             
+            {success && (
+              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 m-4 rounded">
+                {success}
+              </div>
+            )}
+            
             <div className="px-6 py-4">
-              <div className="flex flex-col md:flex-row justify-between mb-6">
-                <div className="mb-4 md:mb-0 md:w-1/3">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Report Type</label>
+              <div className="flex flex-col md:flex-row justify-between mb-4 space-y-2 md:space-y-0">
+                <div className="w-full md:w-1/3">
                   <select
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                     value={reportType}
                     onChange={(e) => setReportType(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="sales">Sales Report</option>
                     <option value="orders">Order Status Report</option>
-                    <option value="products">Top Products Report</option>
-                    <option value="customers">Customer Analytics</option>
+                    <option value="products">Top Selling Products</option>
+                    <option value="customers">Customer Activity</option>
                   </select>
                 </div>
-                <div className="mb-4 md:mb-0 md:w-1/3">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Time Period</label>
+                
+                <div className="w-full md:w-2/3 flex justify-end space-x-2">
                   <select
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                     value={reportPeriod}
                     onChange={(e) => setReportPeriod(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="week">Last 7 Days</option>
-                    <option value="month">Last 30 Days</option>
-                    <option value="quarter">Last 3 Months</option>
-                    <option value="year">Last 12 Months</option>
+                    <option value="week">Last Week</option>
+                    <option value="month">Last Month</option>
+                    <option value="quarter">Last Quarter</option>
+                    <option value="year">Last Year</option>
                   </select>
-                </div>
-                <div className="md:w-1/3 flex items-end">
-                  <button
-                    onClick={() => {
-                      // In a real application, this would generate a PDF or CSV export
-                      alert("Report export functionality would be implemented here");
-                    }}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                    disabled={loadingReport || !reportData}
-                  >
-                    <div className="flex items-center justify-center">
-                      <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                      Export Report
-                    </div>
-                  </button>
                 </div>
               </div>
               
               {loadingReport ? (
-                <div className="flex justify-center py-8">
+                <div className="text-center py-8">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
                 </div>
-              ) : reportData ? (
-                <div className="mt-6">
-                  {reportType === "sales" && (
-                    <div>
-                      <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-6">
-                        <div className="px-4 py-5 sm:px-6">
-                          <h3 className="text-lg leading-6 font-medium text-gray-900">Sales Summary</h3>
-                          <p className="mt-1 max-w-2xl text-sm text-gray-500">
-                            {reportPeriod === "week" ? "Last 7 days" : 
-                             reportPeriod === "month" ? "Last 30 days" : 
-                             reportPeriod === "quarter" ? "Last 3 months" : "Last 12 months"}
-                          </p>
-                        </div>
-                        <div className="border-t border-gray-200">
-                          <dl>
-                            <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                              <dt className="text-sm font-medium text-gray-500">Total Sales</dt>
-                              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                                {reportData.currency}{reportData.totalSales.toLocaleString()}
-                              </dd>
-                            </div>
-                            <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                              <dt className="text-sm font-medium text-gray-500">Average Daily Sales</dt>
-                              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                                {reportData.currency}{reportData.avgDailySales.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                              </dd>
-                            </div>
-                          </dl>
-                        </div>
-                      </div>
-                      
-                      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-                        <div className="px-4 py-5 sm:px-6">
-                          <h3 className="text-lg leading-6 font-medium text-gray-900">Sales Trend</h3>
-                        </div>
-                        <div className="border-t border-gray-200 p-4">
-                          <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
-                            <p className="text-gray-500">Sales chart visualization would appear here</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {reportType === "orders" && (
-                    <div>
-                      <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-6">
-                        <div className="px-4 py-5 sm:px-6">
-                          <h3 className="text-lg leading-6 font-medium text-gray-900">Order Status Summary</h3>
-                          <p className="mt-1 max-w-2xl text-sm text-gray-500">
-                            {reportPeriod === "week" ? "Last 7 days" : 
-                             reportPeriod === "month" ? "Last 30 days" : 
-                             reportPeriod === "quarter" ? "Last 3 months" : "Last 12 months"}
-                          </p>
-                        </div>
-                        <div className="border-t border-gray-200">
-                          <dl>
-                            <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                              <dt className="text-sm font-medium text-gray-500">Total Orders</dt>
-                              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                                {reportData.totalOrders}
-                              </dd>
-                            </div>
-                          </dl>
-                        </div>
-                      </div>
-                      
-                      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-                        <div className="px-4 py-5 sm:px-6">
-                          <h3 className="text-lg leading-6 font-medium text-gray-900">Order Status Distribution</h3>
-                        </div>
-                        <div className="border-t border-gray-200">
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  Status
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  Count
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  Percentage
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                              {reportData.orderStatusData.map((item) => (
-                                <tr key={item.status}>
-                                  <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                      ${item.status === 'delivered' ? 'bg-green-100 text-green-800' : 
-                                        item.status === 'cancelled' ? 'bg-red-100 text-red-800' : 
-                                        item.status === 'shipped' ? 'bg-blue-100 text-blue-800' :
-                                        item.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                                        'bg-gray-100 text-gray-800'}`}>
-                                      {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                                    </span>
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {item.count}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {((item.count / reportData.totalOrders) * 100).toFixed(1)}%
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {reportType === "products" && (
-                    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-                      <div className="px-4 py-5 sm:px-6">
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Top Selling Products</h3>
-                        <p className="mt-1 max-w-2xl text-sm text-gray-500">
-                          {reportPeriod === "week" ? "Last 7 days" : 
-                           reportPeriod === "month" ? "Last 30 days" : 
-                           reportPeriod === "quarter" ? "Last 3 months" : "Last 12 months"}
-                        </p>
-                      </div>
-                      <div className="border-t border-gray-200">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Rank
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Product
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Units Sold
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {reportData.topProducts.map((product, index) => (
-                              <tr key={product.name}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  #{index + 1}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                  {product.name}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {product.sales}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {reportType === "customers" && (
-                    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-                      <div className="px-4 py-5 sm:px-6">
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Customer Analytics</h3>
-                        <p className="mt-1 max-w-2xl text-sm text-gray-500">
-                          {reportPeriod === "week" ? "Last 7 days" : 
-                           reportPeriod === "month" ? "Last 30 days" : 
-                           reportPeriod === "quarter" ? "Last 3 months" : "Last 12 months"}
-                        </p>
-                      </div>
-                      <div className="border-t border-gray-200">
-                        <dl>
-                          {reportData.customerData.map((item) => (
-                            <div key={item.metric} className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                              <dt className="text-sm font-medium text-gray-500">{item.metric}</dt>
-                              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                                {item.count !== undefined ? item.count : 
-                                 item.value !== undefined ? `₹${item.value}` : 
-                                 item.percentage !== undefined ? `${item.percentage}%` : "N/A"}
-                              </dd>
-                            </div>
-                          ))}
-                        </dl>
-                      </div>
-                    </div>
-                  )}
-                </div>
               ) : (
-                <div className="text-center py-8">
-                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No Report Data</h3>
-                  <p className="mt-1 text-sm text-gray-500">Select a report type and time period to generate a report.</p>
+                <div className="overflow-x-auto">
+                  {/* Render different report views based on report type */}
+                  {reportType === "sales" && reportData?.salesData && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-900 mb-4">Sales Report</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <p className="text-sm text-gray-600">Total Sales</p>
+                          <p className="text-xl font-bold text-blue-700">{reportData.currency}{reportData.totalSales?.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-green-50 p-4 rounded-lg">
+                          <p className="text-sm text-gray-600">Average Daily Sales</p>
+                          <p className="text-xl font-bold text-green-700">{reportData.currency}{reportData.avgDailySales?.toFixed(2)}</p>
+                        </div>
+                        <div className="bg-purple-50 p-4 rounded-lg">
+                          <p className="text-sm text-gray-600">Days</p>
+                          <p className="text-xl font-bold text-purple-700">{reportData.salesData.length}</p>
+                        </div>
+                      </div>
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Date
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Sales Amount
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {reportData.salesData.map((item, index) => (
+                            <tr key={index}>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">
+                                  {item.date instanceof Date ? item.date.toLocaleDateString() : new Date(item.date).toLocaleDateString()}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">
+                                  {reportData.currency}{item.amount?.toLocaleString()}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  
+                  {reportType === "orders" && reportData?.orderStatusData && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-900 mb-4">Order Status Report</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <p className="text-sm text-gray-600">Total Orders</p>
+                          <p className="text-xl font-bold text-blue-700">{reportData.totalOrders?.toLocaleString()}</p>
+                        </div>
+                        {reportData.orderStatusData.map((item, index) => (
+                          <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600 capitalize">{item.status}</p>
+                            <p className="text-xl font-bold text-gray-700">{item.count}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Count
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {reportData.orderStatusData.map((item, index) => (
+                            <tr key={index}>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900 capitalize">
+                                  {item.status}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">
+                                  {item.count}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  
+                  {reportType === "products" && reportData?.topProducts && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-900 mb-4">Top Selling Products</h4>
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Product Name
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Sales Count
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {reportData.topProducts.map((item, index) => (
+                            <tr key={index}>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">
+                                  {item.name}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">
+                                  {item.sales}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  
+                  {reportType === "customers" && reportData?.customerData && (
+                    <div>
+                      <h4 className="text-md font-medium text-gray-900 mb-4">Customer Activity</h4>
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Metric
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Value
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {reportData.customerData.map((item, index) => (
+                            <tr key={index}>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">
+                                  {item.metric}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">
+                                  {item.count !== undefined ? item.count : 
+                                   item.value !== undefined ? `${reportData.currency || '₹'}${item.value}` : 
+                                   item.percentage !== undefined ? `${item.percentage}%` : 'N/A'}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  
+                  {!reportData && (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-gray-500">No data available</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1424,268 +1563,199 @@ function AdminDashboard() {
         
       case "settings":
         return (
-          <div>
+          <div className="space-y-6">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">Settings</h3>
+              <h3 className="text-lg leading-6 font-medium text-gray-900">System Settings</h3>
               <p className="mt-1 max-w-2xl text-sm text-gray-500">Configure system settings</p>
             </div>
-            {loadingSettings ? (
-              <div className="flex justify-center items-center py-12">
-                <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              </div>
-            ) : settings ? (
-              <div className="px-6 py-4">
-                {/* Store Information */}
-                <div className="mb-8">
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">Store Information</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Store Name</label>
-                      <input
-                        type="text"
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                        value={settings.storeName || ""}
-                        onChange={(e) => handleSettingsChange("storeName", e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Store Email</label>
-                      <input
-                        type="email"
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                        value={settings.storeEmail || ""}
-                        onChange={(e) => handleSettingsChange("storeEmail", e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Store Phone</label>
-                      <input
-                        type="text"
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                        value={settings.storePhone || ""}
-                        onChange={(e) => handleSettingsChange("storePhone", e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Store Address</label>
-                      <textarea
-                        rows="2"
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                        value={settings.storeAddress || ""}
-                        onChange={(e) => handleSettingsChange("storeAddress", e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Order Settings */}
-                <div className="mb-8">
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">Order Settings</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Tax Rate (%)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                        value={settings.taxRate || 0}
-                        onChange={(e) => handleSettingsChange("taxRate", parseFloat(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Shipping Fee</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                        value={settings.shippingFee || 0}
-                        onChange={(e) => handleSettingsChange("shippingFee", parseFloat(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Free Shipping Threshold</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                        value={settings.freeShippingThreshold || 0}
-                        onChange={(e) => handleSettingsChange("freeShippingThreshold", parseFloat(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Currency Symbol</label>
-                      <input
-                        type="text"
-                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                        value={settings.currency || "₹"}
-                        onChange={(e) => handleSettingsChange("currency", e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-                
-                {/* System Settings */}
-                <div className="mb-8">
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">System Settings</h4>
-                  <div className="space-y-4">
-                    <div className="flex items-center">
-                      <input
-                        id="enablePrescriptionVerification"
-                        type="checkbox"
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        checked={settings.enablePrescriptionVerification || false}
-                        onChange={(e) => handleSettingsChange("enablePrescriptionVerification", e.target.checked)}
-                      />
-                      <label htmlFor="enablePrescriptionVerification" className="ml-2 block text-sm text-gray-900">
-                        Enable Prescription Verification
-                      </label>
-                    </div>
-                    <div className="flex items-center">
-                      <input
-                        id="enableEmailNotifications"
-                        type="checkbox"
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        checked={settings.enableEmailNotifications || false}
-                        onChange={(e) => handleSettingsChange("enableEmailNotifications", e.target.checked)}
-                      />
-                      <label htmlFor="enableEmailNotifications" className="ml-2 block text-sm text-gray-900">
-                        Enable Email Notifications
-                      </label>
-                    </div>
-                    <div className="flex items-center">
-                      <input
-                        id="enableSmsNotifications"
-                        type="checkbox"
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        checked={settings.enableSmsNotifications || false}
-                        onChange={(e) => handleSettingsChange("enableSmsNotifications", e.target.checked)}
-                      />
-                      <label htmlFor="enableSmsNotifications" className="ml-2 block text-sm text-gray-900">
-                        Enable SMS Notifications
-                      </label>
-                    </div>
-                    <div className="flex items-center">
-                      <input
-                        id="allowGuestCheckout"
-                        type="checkbox"
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        checked={settings.allowGuestCheckout || false}
-                        onChange={(e) => handleSettingsChange("allowGuestCheckout", e.target.checked)}
-                      />
-                      <label htmlFor="allowGuestCheckout" className="ml-2 block text-sm text-gray-900">
-                        Allow Guest Checkout
-                      </label>
-                    </div>
-                    <div className="flex items-center">
-                      <input
-                        id="maintenanceMode"
-                        type="checkbox"
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        checked={settings.maintenanceMode || false}
-                        onChange={(e) => handleSettingsChange("maintenanceMode", e.target.checked)}
-                      />
-                      <label htmlFor="maintenanceMode" className="ml-2 block text-sm text-gray-900">
-                        Maintenance Mode
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Action Buttons */}
-                <div className="flex justify-end space-x-3 mt-8">
-                  <button
-                    type="button"
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    onClick={() => setIsResetModalOpen(true)}
-                  >
-                    Reset to Defaults
-                  </button>
-                  <button
-                    type="button"
-                    className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                      !settingsChanged || loading ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
-                    onClick={handleSettingsUpdate}
-                    disabled={!settingsChanged || loading}
-                  >
-                    {loading ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </div>
-                
-                {/* Reset Confirmation Modal */}
-                {isResetModalOpen && (
-                  <div className="fixed z-10 inset-0 overflow-y-auto">
-                    <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                      <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-                        <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
-                      </div>
-                      <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-                      <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-                        <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                          <div className="sm:flex sm:items-start">
-                            <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-                              <svg className="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                            </div>
-                            <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                              <h3 className="text-lg leading-6 font-medium text-gray-900">Reset Settings</h3>
-                              <div className="mt-2">
-                                <p className="text-sm text-gray-500">
-                                  Are you sure you want to reset all settings to their default values? This action cannot be undone.
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                          <button
-                            type="button"
-                            className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
-                            onClick={handleSettingsReset}
-                          >
-                            Reset
-                          </button>
-                          <button
-                            type="button"
-                            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                            onClick={() => setIsResetModalOpen(false)}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h3 className="mt-2 text-sm font-medium text-gray-900">Error Loading Settings</h3>
-                <p className="mt-1 text-sm text-gray-500">{error || "Failed to load settings. Please try again."}</p>
-                <div className="mt-6">
-                  <button
-                    type="button"
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    onClick={loadSettings}
-                  >
-                    Try Again
-                  </button>
-                </div>
+            
+            {error && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 m-4 rounded">
+                {error}
               </div>
             )}
+            
+            {success && (
+              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 m-4 rounded">
+                {success}
+              </div>
+            )}
+            
+            <div className="px-6 py-4">
+              {loadingSettings ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex flex-col md:flex-row justify-between">
+                    <label htmlFor="storeName" className="text-sm font-medium text-gray-700">
+                      Store Name
+                    </label>
+                    <input
+                      type="text"
+                      id="storeName"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      value={settings?.storeName || ""}
+                      onChange={(e) => handleSettingsChange("storeName", e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row justify-between">
+                    <label htmlFor="storeAddress" className="text-sm font-medium text-gray-700">
+                      Store Address
+                    </label>
+                    <input
+                      type="text"
+                      id="storeAddress"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      value={settings?.storeAddress || ""}
+                      onChange={(e) => handleSettingsChange("storeAddress", e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row justify-between">
+                    <label htmlFor="storePhone" className="text-sm font-medium text-gray-700">
+                      Store Phone
+                    </label>
+                    <input
+                      type="text"
+                      id="storePhone"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      value={settings?.storePhone || ""}
+                      onChange={(e) => handleSettingsChange("storePhone", e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row justify-between">
+                    <label htmlFor="storeEmail" className="text-sm font-medium text-gray-700">
+                      Store Email
+                    </label>
+                    <input
+                      type="email"
+                      id="storeEmail"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      value={settings?.storeEmail || ""}
+                      onChange={(e) => handleSettingsChange("storeEmail", e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row justify-between">
+                    <label htmlFor="storeCurrency" className="text-sm font-medium text-gray-700">
+                      Store Currency
+                    </label>
+                    <input
+                      type="text"
+                      id="storeCurrency"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      value={settings?.storeCurrency || ""}
+                      onChange={(e) => handleSettingsChange("storeCurrency", e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row justify-between">
+                    <label htmlFor="storeTaxRate" className="text-sm font-medium text-gray-700">
+                      Store Tax Rate (%)
+                    </label>
+                    <input
+                      type="number"
+                      id="storeTaxRate"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      value={settings?.storeTaxRate || ""}
+                      onChange={(e) => handleSettingsChange("storeTaxRate", e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row justify-between">
+                    <label htmlFor="storeShippingFee" className="text-sm font-medium text-gray-700">
+                      Store Shipping Fee
+                    </label>
+                    <input
+                      type="number"
+                      id="storeShippingFee"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      value={settings?.storeShippingFee || ""}
+                      onChange={(e) => handleSettingsChange("storeShippingFee", e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row justify-between">
+                    <label htmlFor="storePaymentMethods" className="text-sm font-medium text-gray-700">
+                      Store Payment Methods
+                    </label>
+                    <input
+                      type="text"
+                      id="storePaymentMethods"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      value={settings?.storePaymentMethods || ""}
+                      onChange={(e) => handleSettingsChange("storePaymentMethods", e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row justify-between">
+                    <label htmlFor="storeReturnPolicy" className="text-sm font-medium text-gray-700">
+                      Store Return Policy
+                    </label>
+                    <textarea
+                      id="storeReturnPolicy"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      value={settings?.storeReturnPolicy || ""}
+                      onChange={(e) => handleSettingsChange("storeReturnPolicy", e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row justify-between">
+                    <label htmlFor="storePrivacyPolicy" className="text-sm font-medium text-gray-700">
+                      Store Privacy Policy
+                    </label>
+                    <textarea
+                      id="storePrivacyPolicy"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      value={settings?.storePrivacyPolicy || ""}
+                      onChange={(e) => handleSettingsChange("storePrivacyPolicy", e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row justify-between">
+                    <label htmlFor="storeTermsOfService" className="text-sm font-medium text-gray-700">
+                      Store Terms of Service
+                    </label>
+                    <textarea
+                      id="storeTermsOfService"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      value={settings?.storeTermsOfService || ""}
+                      onChange={(e) => handleSettingsChange("storeTermsOfService", e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex justify-end space-x-2">
+                    <button
+                      onClick={handleSettingsUpdate}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      disabled={!settingsChanged}
+                    >
+                      Save Changes
+                    </button>
+                    
+                    <button
+                      onClick={() => setIsResetModalOpen(true)}
+                      className="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+                    >
+                      Reset to Defaults
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         );
         
+      case "products":
+        return (
+          <div className="bg-white">
+            <AdminProducts />
+          </div>
+        );
       default:
         return null;
     }
@@ -1697,10 +1767,7 @@ function AdminDashboard() {
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Logo */}
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-blue-600">MediHaven</h1>
-            </div>
+            {/* Logo removed to avoid duplicate branding on Admin page */}
 
             {/* Search and User */}
             <div className="flex items-center space-x-4">
@@ -1718,22 +1785,9 @@ function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Shopping Cart */}
-              <button className="p-2 text-gray-700 hover:text-blue-600">
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                </svg>
-              </button>
+              {/* Shopping Cart removed per admin request */}
 
-              {/* User Dropdown */}
-              <div className="relative">
-                <button className="flex items-center space-x-2 text-gray-700 hover:text-blue-600">
-                  <span className="text-sm font-medium">Admin Dashboard</span>
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
+              {/* User dropdown removed to avoid duplicate 'Admin Dashboard' text */}
             </div>
           </div>
         </div>
@@ -1862,7 +1916,7 @@ function AdminDashboard() {
                         >
                           <option value="customer">Customer</option>
                           <option value="staff">Staff</option>
-                          <option value="admin">Admin</option>
+                          <option value="delivery">Delivery</option>
                         </select>
                       </div>
                     </div>
@@ -2029,6 +2083,149 @@ function AdminDashboard() {
                   className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                   onClick={() => setIsOrderStatusModalOpen(false)}
                   disabled={updatingOrder}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Prescription Status Update Modal */}
+      {isPrescriptionModalOpen && (
+        <div className="fixed z-10 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+            
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                      Update Prescription Status
+                    </h3>
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-500 mb-4">
+                        Update status for prescription: <span className="font-medium">
+                          {selectedPrescription?.id.substring(0, 8)}
+                        </span>
+                      </p>
+                      
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Current Status: <span className="font-medium capitalize">{selectedPrescription?.status || "pending"}</span>
+                        </label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Select New Status
+                        </label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                          value={selectedPrescriptionStatus}
+                          onChange={(e) => setSelectedPrescriptionStatus(e.target.value)}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="approved">Approved</option>
+                          <option value="rejected">Rejected</option>
+                        </select>
+                      </div>
+                      
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Notes (Optional)
+                        </label>
+                        <textarea
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                          rows="3"
+                          value={prescriptionNotes}
+                          onChange={(e) => setPrescriptionNotes(e.target.value)}
+                          placeholder="Add any notes about this prescription status change..."
+                        />
+                      </div>
+                      
+                      {/* Prescription details summary */}
+                      <div className="mt-4 bg-gray-50 p-3 rounded-md">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Prescription Summary</h4>
+                        <div className="text-sm text-gray-600">
+                          <p>User: {selectedPrescription?.user?.displayName || selectedPrescription?.user?.email || "Unknown User"}</p>
+                          <p>Date: {selectedPrescription?.createdAt ? 
+                                   (selectedPrescription.createdAt.seconds ? 
+                                     new Date(selectedPrescription.createdAt.seconds * 1000).toLocaleDateString() : 
+                                     new Date(selectedPrescription.createdAt).toLocaleDateString()
+                                   ) : "N/A"}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button 
+                  type="button" 
+                  className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm ${
+                    updatingPrescription ? "opacity-70 cursor-not-allowed" : ""
+                  }`}
+                  onClick={handlePrescriptionStatusUpdate}
+                  disabled={updatingPrescription}
+                >
+                  {updatingPrescription ? "Updating..." : "Update Status"}
+                </button>
+                <button 
+                  type="button" 
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={() => setIsPrescriptionModalOpen(false)}
+                  disabled={updatingPrescription}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Settings Reset Confirmation Modal */}
+      {isResetModalOpen && (
+        <div className="fixed z-10 inset-0 overflow-y-auto">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                    <svg className="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">Reset Settings</h3>
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-500">
+                        Are you sure you want to reset all settings to their default values? This action cannot be undone.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={handleSettingsReset}
+                >
+                  Reset
+                </button>
+                <button
+                  type="button"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={() => setIsResetModalOpen(false)}
                 >
                   Cancel
                 </button>

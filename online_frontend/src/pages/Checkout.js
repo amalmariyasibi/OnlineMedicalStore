@@ -1,13 +1,18 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useCart } from "../contexts/CartContext";
-import { createOrder } from "../firebase";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useCart } from "../contexts/CartContextSimple";
+import { createOrder, getUserOrders } from "../firebase";
 import { useAuth } from "../contexts/AuthContext";
 
 function Checkout() {
   const { items, cartTotal, prescriptionRequired, clearCart } = useCart();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const buyNowItem = location.state?.buyNowItem;
+  const checkoutItems = buyNowItem ? [buyNowItem] : items;
+  const computedSubtotal = buyNowItem ? (buyNowItem.price * buyNowItem.quantity) : cartTotal;
+  const computedPrescriptionRequired = buyNowItem ? (buyNowItem.requiresPrescription || false) : prescriptionRequired;
   
   const [formData, setFormData] = useState({
     firstName: "",
@@ -25,6 +30,37 @@ function Checkout() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   
+  // Load previous address when component mounts
+  useEffect(() => {
+    const loadPreviousAddress = async () => {
+      if (currentUser?.uid) {
+        try {
+          const ordersResult = await getUserOrders(currentUser.uid);
+          if (ordersResult.success && ordersResult.orders.length > 0) {
+            // Get the most recent order
+            const latestOrder = ordersResult.orders[0];
+            if (latestOrder.shippingAddress) {
+              setFormData(prev => ({
+                ...prev,
+                firstName: latestOrder.shippingAddress.firstName || prev.firstName,
+                lastName: latestOrder.shippingAddress.lastName || prev.lastName,
+                phone: latestOrder.shippingAddress.phone || prev.phone,
+                address: latestOrder.shippingAddress.address || prev.address,
+                city: latestOrder.shippingAddress.city || prev.city,
+                state: latestOrder.shippingAddress.state || prev.state,
+                pincode: latestOrder.shippingAddress.pincode || prev.pincode,
+              }));
+            }
+          }
+        } catch (err) {
+          console.error("Error loading previous address:", err);
+        }
+      }
+    };
+    
+    loadPreviousAddress();
+  }, [currentUser]);
+  
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -36,8 +72,15 @@ function Checkout() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (items.length === 0) {
+    if (checkoutItems.length === 0) {
       setError("Your cart is empty");
+      return;
+    }
+    
+    // Validate required fields
+    if (!formData.firstName || !formData.lastName || !formData.phone || 
+        !formData.address || !formData.city || !formData.state || !formData.pincode) {
+      setError("Please fill in all required fields");
       return;
     }
     
@@ -57,7 +100,7 @@ function Checkout() {
       const order = {
         userId: currentUser?.uid || 'guest',
         userEmail: formData.email,
-        items: items.map(item => ({
+        items: checkoutItems.map(item => ({
           id: item.id,
           name: item.name,
           price: item.price,
@@ -92,8 +135,7 @@ function Checkout() {
       
       if (result.success) {
         console.log("Order created successfully with ID:", result.orderId);
-        // Clear cart and redirect to order confirmation
-        clearCart();
+        // Redirect to order confirmation without clearing cart
         navigate(`/order-confirmation/${result.orderId}`);
       } else {
         console.error("Failed to create order:", result.error);
@@ -107,7 +149,7 @@ function Checkout() {
     }
   };
   
-  if (items.length === 0 && !loading) {
+  if (checkoutItems.length === 0 && !loading) {
     navigate("/cart");
     return null;
   }
@@ -377,11 +419,11 @@ function Checkout() {
                 
                 <div className="mt-6 flow-root">
                   <ul className="-my-4 divide-y divide-gray-200">
-                    {items.map((item) => (
+                    {checkoutItems.map((item) => (
                       <li key={item.id} className="flex py-4">
                         <div className="flex-shrink-0">
                           <img
-                            src={item.imageUrl || "https://via.placeholder.com/80x80?text=No+Image"}
+                            src={item.imageUrl || "https://placehold.co/80x80?text=No+Image"}
                             alt={item.name}
                             className="w-16 h-16 rounded-md object-center object-cover"
                           />
@@ -406,18 +448,18 @@ function Checkout() {
                 <div className="mt-6 space-y-4">
                   <div className="flex justify-between text-sm">
                     <p className="text-gray-500">Subtotal</p>
-                    <p>₹{cartTotal.toFixed(2)}</p>
+                    <p>₹{computedSubtotal.toFixed(2)}</p>
                   </div>
                   
                   <div className="flex justify-between text-sm">
                     <p className="text-gray-500">Tax (18%)</p>
-                    <p>₹{(cartTotal * 0.18).toFixed(2)}</p>
+                    <p>₹{(computedSubtotal * 0.18).toFixed(2)}</p>
                   </div>
                   
                   <div className="flex justify-between text-sm">
                     <p className="text-gray-500">Delivery</p>
                     <p>
-                      {cartTotal > 500 ? (
+                      {computedSubtotal > 500 ? (
                         <span className="text-green-600">Free</span>
                       ) : (
                         <span>₹50.00</span>
@@ -427,11 +469,11 @@ function Checkout() {
                   
                   <div className="mt-6 flex justify-between text-base font-medium text-gray-900">
                     <p>Total</p>
-                    <p>₹{(cartTotal + (cartTotal * 0.18) + (cartTotal > 500 ? 0 : 50)).toFixed(2)}</p>
+                    <p>₹{(computedSubtotal + (computedSubtotal * 0.18) + (computedSubtotal > 500 ? 0 : 50)).toFixed(2)}</p>
                   </div>
                 </div>
                 
-                {prescriptionRequired && (
+                {computedPrescriptionRequired && (
                   <div className="mt-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
                     <div className="flex">
                       <div className="flex-shrink-0">

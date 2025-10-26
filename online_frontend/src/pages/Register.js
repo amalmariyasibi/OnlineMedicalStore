@@ -6,8 +6,10 @@ import {
   isAuthenticated, 
   createUserData,
   updateUserProfile,
-  sendEmailVerification
+  sendEmailVerification,
+  checkEmailExists
 } from "../firebase";
+import { FaEye, FaEyeSlash } from "react-icons/fa";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -16,8 +18,14 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState("customer"); // Add role state
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
+  
+  // Debounce timer for email check
+  const [emailCheckTimer, setEmailCheckTimer] = useState(null);
 
   // Check if user is already logged in
   useEffect(() => {
@@ -25,9 +33,47 @@ export default function Register() {
       navigate("/");
     }
   }, [navigate]);
+  
+  // Handle email change with debounced validation
+  const handleEmailChange = (e) => {
+    const newEmail = e.target.value;
+    setEmail(newEmail);
+    
+    // Clear any existing email errors when the user types
+    setErrors(prev => ({...prev, email: undefined}));
+    
+    // Clear any existing timer
+    if (emailCheckTimer) {
+      clearTimeout(emailCheckTimer);
+    }
+    
+    // Only check if email exists if it's a valid email format
+    if (newEmail && /\S+@\S+\.\S+/.test(newEmail)) {
+      setIsCheckingEmail(true);
+      
+      // Set a new timer to check after user stops typing for 800ms
+      const timer = setTimeout(async () => {
+        try {
+          const emailCheck = await checkEmailExists(newEmail);
+          if (emailCheck.exists) {
+            setErrors(prev => ({
+              ...prev, 
+              email: "This email is already registered. Please use a different email or sign in."
+            }));
+          }
+        } catch (error) {
+          console.error("Error checking email:", error);
+        } finally {
+          setIsCheckingEmail(false);
+        }
+      }, 800);
+      
+      setEmailCheckTimer(timer);
+    }
+  };
 
   // Validation function
-  const validateForm = () => {
+  const validateForm = async () => {
     const newErrors = {};
     
     // Name validation
@@ -42,6 +88,19 @@ export default function Register() {
       newErrors.email = "Email is required";
     } else if (!/\S+@\S+\.\S+/.test(email)) {
       newErrors.email = "Email address is invalid";
+    } else {
+      // Check if email already exists
+      setIsLoading(true);
+      try {
+        const emailCheck = await checkEmailExists(email);
+        if (emailCheck.exists) {
+          newErrors.email = "This email is already registered. Please use a different email or sign in.";
+        }
+      } catch (error) {
+        console.error("Error checking email:", error);
+      } finally {
+        setIsLoading(false);
+      }
     }
     
     // Password validation
@@ -49,6 +108,12 @@ export default function Register() {
       newErrors.password = "Password is required";
     } else if (password.length < 6) {
       newErrors.password = "Password must be at least 6 characters";
+    } else if (!/[A-Z]/.test(password)) {
+      newErrors.password = "Password must contain at least one uppercase letter";
+    } else if (!/[0-9]/.test(password)) {
+      newErrors.password = "Password must contain at least one number";
+    } else if (!/[!@#$%^&*]/.test(password)) {
+      newErrors.password = "Password must contain at least one special character (!@#$%^&*)";
     }
     
     // Confirm password validation
@@ -65,12 +130,13 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate form
-    if (!validateForm()) {
+    // Validate form (now async)
+    setIsLoading(true);
+    const isValid = await validateForm();
+    if (!isValid) {
+      setIsLoading(false);
       return;
     }
-    
-    setIsLoading(true);
     
     try {
       // Register with Firebase
@@ -245,15 +311,28 @@ export default function Register() {
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
               </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={`mt-1 block w-full px-3 py-2 border ${errors.password ? "border-red-300" : "border-gray-300"} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
-                placeholder="••••••••"
-              />
+              <div className="relative mt-1">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={`block w-full px-3 py-2 border ${errors.password ? "border-red-300" : "border-gray-300"} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <FaEyeSlash className="h-5 w-5" />
+                  ) : (
+                    <FaEye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
               {errors.password ? (
                 <p className="mt-1 text-sm text-red-600">{errors.password}</p>
               ) : (
@@ -267,15 +346,28 @@ export default function Register() {
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
                 Confirm Password
               </label>
-              <input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`mt-1 block w-full px-3 py-2 border ${errors.confirmPassword ? "border-red-300" : "border-gray-300"} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
-                placeholder="••••••••"
-              />
+              <div className="relative mt-1">
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`block w-full px-3 py-2 border ${errors.confirmPassword ? "border-red-300" : "border-gray-300"} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? (
+                    <FaEyeSlash className="h-5 w-5" />
+                  ) : (
+                    <FaEye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
               {errors.confirmPassword && (
                 <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
               )}

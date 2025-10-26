@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getMedicineById } from "../firebase";
-import { useCart } from "../contexts/CartContext";
+import { useCart } from "../contexts/CartContextSimple";
 import { useAuth } from "../contexts/AuthContext";
 import PrescriptionUpload from "../components/PrescriptionUpload";
 

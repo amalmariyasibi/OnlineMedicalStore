@@ -1,9 +1,51 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useCart } from "../contexts/CartContext";
+import { useAuth } from "../contexts/AuthContext";
 
 function CartIcon() {
-  const { itemCount } = useCart();
+  const { currentUser } = useAuth();
+  const [itemCount, setItemCount] = useState(0);
+
+  useEffect(() => {
+    const updateCartCount = () => {
+      const cartKey = currentUser ? `cart_${currentUser.uid}` : 'cart_guest';
+      const savedCart = localStorage.getItem(cartKey);
+      
+      console.log('🔔 CartIcon - Updating count:');
+      console.log('🔑 Cart key:', cartKey);
+      console.log('💾 Saved cart:', savedCart);
+      
+      if (savedCart) {
+        try {
+          const parsedCart = JSON.parse(savedCart);
+          const count = parsedCart.reduce((total, item) => total + item.quantity, 0);
+          console.log('📦 Parsed cart:', parsedCart);
+          console.log('🔢 Count:', count);
+          setItemCount(count);
+        } catch (error) {
+          console.log('❌ Parse error:', error);
+          setItemCount(0);
+        }
+      } else {
+        console.log('❌ No cart found, setting count to 0');
+        setItemCount(0);
+      }
+    };
+    
+    // Update count on mount
+    updateCartCount();
+    
+    // Listen for storage changes
+    window.addEventListener('storage', updateCartCount);
+    
+    // Custom event for same-tab updates
+    window.addEventListener('cartUpdated', updateCartCount);
+    
+    return () => {
+      window.removeEventListener('storage', updateCartCount);
+      window.removeEventListener('cartUpdated', updateCartCount);
+    };
+  }, [currentUser]);
 
   return (
     <Link to="/cart" className="group -m-2 p-2 flex items-center">

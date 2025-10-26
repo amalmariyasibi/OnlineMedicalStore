@@ -1,41 +1,8 @@
 import React, { createContext, useContext, useReducer, useEffect } from "react";
 import { useAuth } from "./AuthContext";
-import { db } from "../firebaseConfig";
-import { doc, getDoc } from "firebase/firestore";
+import { getProductById } from "../firebase";
 
 const CartContext = createContext();
-
-// Helper function to get product by ID
-const getProductById = async (productId) => {
-  try {
-    // First try to find in products collection
-    let productRef = doc(db, "products", productId);
-    let productSnap = await getDoc(productRef);
-    
-    if (productSnap.exists()) {
-      return { 
-        success: true, 
-        product: { id: productSnap.id, ...productSnap.data(), type: "product" } 
-      };
-    }
-    
-    // If not found, try medicines collection
-    productRef = doc(db, "medicines", productId);
-    productSnap = await getDoc(productRef);
-    
-    if (productSnap.exists()) {
-      return { 
-        success: true, 
-        product: { id: productSnap.id, ...productSnap.data(), type: "medicine" } 
-      };
-    }
-    
-    return { success: false, error: "Product not found" };
-  } catch (error) {
-    console.error("Error getting product:", error);
-    return { success: false, error: error.message };
-  }
-};
 
 // Initial state
 const initialState = {
@@ -221,16 +188,30 @@ export function CartProvider({ children }) {
   // Add to cart
   const addToCart = async (productId, quantity = 1) => {
     try {
+      console.log('🛒 Adding to cart:', productId, 'quantity:', quantity);
       dispatch({ type: SET_LOADING, payload: true });
+      dispatch({ type: SET_ERROR, payload: null });
       
-      // Fetch fresh product data
-      const result = await getProductById(productId);
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 10000)
+      );
+      
+      // Fetch fresh product data using the firebase function
+      console.log('📦 Fetching product data...');
+      const result = await Promise.race([
+        getProductById(productId),
+        timeoutPromise
+      ]);
+      console.log('📦 Product fetch result:', result);
       
       if (result.success) {
         const product = result.product;
+        console.log('✅ Product found:', product.name);
         
         // Check if product is in stock
         if (product.stockQuantity <= 0) {
+          console.log('❌ Product out of stock');
           dispatch({ 
             type: SET_ERROR, 
             payload: "Sorry, this product is out of stock" 
@@ -240,6 +221,7 @@ export function CartProvider({ children }) {
         
         // Check if requested quantity is available
         if (quantity > product.stockQuantity) {
+          console.log('❌ Insufficient stock');
           dispatch({ 
             type: SET_ERROR, 
             payload: `Only ${product.stockQuantity} items available` 
@@ -247,17 +229,20 @@ export function CartProvider({ children }) {
           return false;
         }
         
+        console.log('✅ Adding product to cart...');
         dispatch({ 
           type: ADD_TO_CART, 
           payload: { product, quantity } 
         });
         
+        console.log('✅ Product added to cart successfully!');
         dispatch({ type: SET_ERROR, payload: null });
         return true;
       } else {
+        console.log('❌ Product not found:', result.error);
         dispatch({ 
           type: SET_ERROR, 
-          payload: result.error || "Failed to add product to cart" 
+          payload: result.error || "Product not found. Please try again." 
         });
         return false;
       }

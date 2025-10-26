@@ -27,20 +27,70 @@ import {
   addDoc,
   orderBy,
   Timestamp,
-  limit
+  limit,
+  onSnapshot
 } from "firebase/firestore";
-import {
+import { 
   ref,
   uploadBytes,
   getDownloadURL,
   deleteObject
 } from "firebase/storage";
+import { getMessaging, getToken as getFcmToken, onMessage as onFcmMessage, isSupported as isMessagingSupported } from "firebase/messaging";
 
 // Import Firebase config
 import { auth, db, storage } from './firebaseConfig';
 
 // Export db and storage for direct access
 export { db, storage };
+
+// --- Firebase Cloud Messaging (Web) helpers ---
+let messagingInstance = null;
+const initMessaging = async () => {
+  try {
+    if (!(await isMessagingSupported())) return null;
+    if (messagingInstance) return messagingInstance;
+    messagingInstance = getMessaging();
+    // Register SW if not already
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      // associate messaging with this SW
+      // getMessaging() in v9 automatically uses default SW; explicit useServiceWorker not needed
+    }
+    return messagingInstance;
+  } catch (e) {
+    console.warn('Messaging not supported or failed to init:', e?.message);
+    return null;
+  }
+};
+
+export const requestAndSaveFcmToken = async (userId) => {
+  try {
+    const m = await initMessaging();
+    if (!m || !userId) return { success: false, error: 'Messaging unsupported or missing user' };
+    const vapidKey = 'BOaXWfQ8wRmSy-7HpSuQutlMpGNcfssfh0jBAh3nrfBWmRDts9FlfbX7wAKSbsI6l3Lxizli50qFnGV-lQLg33o';
+    const token = await getFcmToken(m, { vapidKey });
+    if (!token) return { success: false, error: 'No FCM token (permission denied?)' };
+    // Save token into users/{uid}.fcmTokens (array union)
+    const userRef = doc(db, 'users', userId);
+    const snap = await getDoc(userRef);
+    const existing = snap.exists() ? (snap.data().fcmTokens || []) : [];
+    if (!existing.includes(token)) {
+      await updateDoc(userRef, { fcmTokens: [...existing, token], updatedAt: new Date() }).catch(async () => {
+        await setDoc(userRef, { fcmTokens: [token], updatedAt: new Date() }, { merge: true });
+      });
+    }
+    return { success: true, token };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+export const onForegroundNotification = async (handler) => {
+  const m = await initMessaging();
+  if (!m) return () => {};
+  return onFcmMessage(m, handler);
+};
 
 // Default system settings
 const DEFAULT_SETTINGS = {
@@ -59,6 +109,18 @@ const DEFAULT_SETTINGS = {
   maintenanceMode: false,
   createdAt: new Date(),
   updatedAt: new Date()
+};
+
+// Generate a random OTP
+const generateOTP = (length = 6) => {
+  const digits = '0123456789';
+  let OTP = '';
+  
+  for (let i = 0; i < length; i++) {
+    OTP += digits[Math.floor(Math.random() * 10)];
+  }
+  
+  return OTP;
 };
 
 // Google provider
@@ -139,6 +201,45 @@ export const isAuthenticated = () => {
 // Auth state observer
 export const onAuthStateChanged = (callback) => {
   return firebaseAuthStateChanged(auth, callback);
+};
+
+// Check if email already exists
+export const checkEmailExists = async (email) => {
+  try {
+    // Query Firestore to check if the email exists
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("email", "==", email));
+    const querySnapshot = await getDocs(q);
+    
+    // If we found any documents with this email, it exists
+    if (!querySnapshot.empty) {
+      return { exists: true };
+    }
+    
+    // Try to sign in with an invalid password to check if the email exists in Auth
+    // This will fail, but the error code will tell us if the email exists
+    try {
+      await signInWithEmailAndPassword(auth, email, "dummy-password-for-check");
+      // If we get here, something went wrong (should never happen)
+      return { exists: true };
+    } catch (authError) {
+      // auth/user-not-found means the email doesn't exist
+      // auth/wrong-password means the email exists but password is wrong
+      if (authError.code === 'auth/user-not-found') {
+        return { exists: false };
+      } else if (authError.code === 'auth/wrong-password') {
+        return { exists: true };
+      } else {
+        // For other errors, we'll assume the email doesn't exist
+        console.log("Auth error during email check:", authError.code);
+        return { exists: false };
+      }
+    }
+  } catch (error) {
+    console.error("Error checking if email exists:", error);
+    // In case of error, we'll return false to allow the registration attempt
+    return { exists: false, error: error.message };
+  }
 };
 
 // Send password reset email
@@ -1257,29 +1358,42 @@ export const createOrder = async (orderData) => {
       return { success: false, error: "Order must contain at least one item" };
     }
     
+    // Backward compatibility: accept deliveryAddress and map to shippingAddress if needed
+    if (!orderData.shippingAddress && orderData.deliveryAddress) {
+      orderData = {
+        ...orderData,
+        shippingAddress: orderData.deliveryAddress,
+      };
+    }
+
+    // Validate shipping address presence
     if (!orderData.shippingAddress) {
       return { success: false, error: "Shipping address is required" };
     }
-    
+
     // Check if any items require prescription
     const requiresPrescription = orderData.items.some(item => item.requiresPrescription);
-    
-    // Add timestamps and metadata
+
+    // Generate OTP for delivery confirmation
+    const deliveryOtp = generateOTP(6);
+
+    // Add timestamps, OTP, and metadata
     const orderWithTimestamps = {
       ...orderData,
       requiresPrescription,
       createdAt: new Date(),
       updatedAt: new Date(),
       status: orderData.status || "pending",
-      isGuestCheckout: !orderData.userId || orderData.userId === 'guest'
+      isGuestCheckout: !orderData.userId || orderData.userId === 'guest',
+      deliveryOtp
     };
-    
+
     const orderRef = await addDoc(collection(db, "orders"), orderWithTimestamps);
     const orderId = orderRef.id;
-    
+
     // Update the order with its ID for easier reference
     await updateDoc(orderRef, { orderId });
-    
+
     // Update product stock quantities
     for (const item of orderData.items) {
       try {
@@ -1305,12 +1419,60 @@ export const createOrder = async (orderData) => {
     
     // If user is logged in, add order to user's orders collection
     if (orderData.userId && orderData.userId !== 'guest') {
+      // Ensure we always store a numeric total
+      const computedTotal = (Array.isArray(orderData.items)
+        ? orderData.items.reduce((sum, item) => {
+            const price = Number(item.price) || 0;
+            const qty = Number(item.quantity) || 0;
+            return sum + price * qty;
+          }, 0)
+        : 0);
+      const safeTotal = (typeof orderData.totalAmount === 'number')
+        ? orderData.totalAmount
+        : (typeof orderData.total === 'number')
+          ? orderData.total
+          : computedTotal;
+
       await addDoc(collection(db, 'users', orderData.userId, 'orders'), {
         orderId,
         createdAt: orderWithTimestamps.createdAt,
-        total: orderData.total,
+        total: safeTotal,
         status: orderWithTimestamps.status
       });
+    }
+    
+    // Send order confirmation email if user is logged in
+    try {
+      if (orderData.userId && orderData.userId !== 'guest') {
+        const userRef = doc(db, "users", orderData.userId);
+        const userSnap = await getDoc(userRef);
+        
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          
+          // Call the backend notification API
+          const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4321'}/api/notifications/order-confirmation`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({
+              order: {
+                ...orderWithTimestamps,
+                orderId
+              },
+              user: userData
+            })
+          });
+          
+          const notificationResult = await response.json();
+          console.log('Order confirmation notification result:', notificationResult);
+        }
+      }
+    } catch (notificationError) {
+      console.error('Failed to send order confirmation notification:', notificationError);
+      // Continue with the order creation even if notification fails
     }
     
     return { 
@@ -1374,21 +1536,237 @@ export const getUserOrders = async (userId) => {
   }
 };
 
+// Get orders assigned to a delivery person
+export const getDeliveryOrders = async (deliveryPersonId) => {
+  try {
+    // First try to get orders without sorting to check if any exist
+    const simpleQuery = query(
+      collection(db, "orders"),
+      where("deliveryPersonId", "==", deliveryPersonId)
+    );
+    
+    const simpleSnapshot = await getDocs(simpleQuery);
+    
+    // If no orders exist, return empty array immediately
+    if (simpleSnapshot.empty) {
+      return { success: true, orders: [] };
+    }
+    
+    // If orders exist, try the sorted query (which requires the index)
+    try {
+      const ordersQuery = query(
+        collection(db, "orders"),
+        where("deliveryPersonId", "==", deliveryPersonId),
+        orderBy("createdAt", "desc")
+      );
+      
+      const querySnapshot = await getDocs(ordersQuery);
+      const orders = [];
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        orders.push({
+          id: doc.id,
+          ...data,
+          date: data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
+          customer: data.userName || 'Customer',
+          address: data.address || 'No address provided',
+          items: data.items?.length || 0,
+          total: data.total ? `₹${data.total}` : 'N/A',
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date()
+        });
+      });
+      
+      return { success: true, orders };
+    } catch (indexError) {
+      // If we get an index error, throw it to be handled by the UI
+      if (indexError.message.includes("index")) {
+        throw indexError;
+      }
+      
+      // For other errors, try to return the unsorted data as a fallback
+      const orders = [];
+      simpleSnapshot.forEach((doc) => {
+        const data = doc.data();
+        orders.push({
+          id: doc.id,
+          ...data,
+          date: data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
+          customer: data.userName || 'Customer',
+          address: data.address || 'No address provided',
+          items: data.items?.length || 0,
+          total: data.total ? `₹${data.total}` : 'N/A'
+        });
+      });
+      
+      return { 
+        success: true, 
+        orders,
+        warning: "Orders are displayed in unsorted order due to a temporary database issue."
+      };
+    }
+  } catch (error) {
+    console.error("Error fetching delivery orders:", error);
+    return { success: false, error: error.message };
+  }
+};
+
 // Update order status
-export const updateOrderStatus = async (orderId, status) => {
+export const updateOrderStatus = async (orderId, status, otpCode = null) => {
   try {
     const orderRef = doc(db, "orders", orderId);
+    const orderSnap = await getDoc(orderRef);
+    
+    if (!orderSnap.exists()) {
+      return { success: false, error: "Order not found" };
+    }
+    
+    const orderData = orderSnap.data();
+    
+    // If status is "Delivered" and OTP is required, verify OTP
+    if (status === "Delivered" && otpCode) {
+      // Check if OTP matches
+      if (orderData.deliveryOtp !== otpCode) {
+        return { success: false, error: "Invalid OTP code" };
+      }
+    }
     
     await updateDoc(orderRef, {
       status,
       updatedAt: new Date()
     });
     
+    // Send notification for status update
+    try {
+      // Get user data for the customer
+      if (orderData.userId && orderData.userId !== 'guest') {
+        const userRef = doc(db, "users", orderData.userId);
+        const userSnap = await getDoc(userRef);
+        
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          
+          // Call the backend notification API
+          const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4321'}/api/notifications/order-status-update`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({
+              order: orderData,
+              user: userData,
+              status
+            })
+          });
+          
+          const notificationResult = await response.json();
+          console.log('Order status update notification result:', notificationResult);
+        }
+      }
+      
+      // If there's a delivery person assigned and status changes, send them a push notification
+      if (orderData.deliveryPersonId) {
+        try {
+          const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4321'}/api/notifications/push`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({
+              userId: orderData.deliveryPersonId,
+              notification: {
+                title: 'Order Status Update',
+                body: `Order #${orderData.orderId} status has been updated to ${status}`,
+                data: {
+                  type: 'order_status_update',
+                  orderId: orderData.orderId,
+                  status
+                }
+              }
+            })
+          });
+          
+          const pushResult = await response.json();
+          console.log('Push notification result:', pushResult);
+        } catch (pushError) {
+          console.error('Failed to send push notification:', pushError);
+        }
+      }
+    } catch (notificationError) {
+      console.error('Failed to send order status notification:', notificationError);
+      // Continue with the status update even if notification fails
+    }
+    
     return { 
       success: true, 
       message: "Order status updated successfully" 
     };
   } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Assign delivery person to an order
+export const assignDeliveryPerson = async (orderId, deliveryPersonId) => {
+  try {
+    // Get order details
+    const orderRef = doc(db, "orders", orderId);
+    const orderSnap = await getDoc(orderRef);
+    
+    if (!orderSnap.exists()) {
+      return { success: false, error: "Order not found" };
+    }
+    
+    // Get delivery person details
+    const deliveryPersonRef = doc(db, "users", deliveryPersonId);
+    const deliveryPersonSnap = await getDoc(deliveryPersonRef);
+    
+    if (!deliveryPersonSnap.exists()) {
+      return { success: false, error: "Delivery person not found" };
+    }
+    
+    const orderData = orderSnap.data();
+    const deliveryPersonData = deliveryPersonSnap.data();
+    
+    // Update order with delivery person info
+    await updateDoc(orderRef, {
+      deliveryPersonId,
+      deliveryPersonName: deliveryPersonData.displayName || deliveryPersonData.email,
+      status: "Ready for Delivery",
+      updatedAt: new Date()
+    });
+    
+    // Send notification to delivery person
+    try {
+      // Call the backend notification API
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4321'}/api/notifications/delivery-assignment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          order: orderData,
+          deliveryPerson: { ...deliveryPersonData, uid: deliveryPersonId }
+        })
+      });
+      
+      const notificationResult = await response.json();
+      console.log('Delivery assignment notification result:', notificationResult);
+    } catch (notificationError) {
+      console.error('Failed to send delivery assignment notification:', notificationError);
+      // Continue with the assignment even if notification fails
+    }
+    
+    return { 
+      success: true, 
+      message: "Delivery person assigned successfully" 
+    };
+  } catch (error) {
+    console.error("Error assigning delivery person:", error);
     return { success: false, error: error.message };
   }
 };
@@ -1420,6 +1798,43 @@ export const getAllOrders = async (filters = {}) => {
   } catch (error) {
     console.error("Error getting all orders:", error);
     return { success: false, error: error.message };
+  }
+};
+
+// Listen for real-time order updates (for admin dashboard)
+export const onOrdersUpdate = (filters = {}, callback) => {
+  try {
+    let ordersQuery = collection(db, "orders");
+    
+    // Apply filters if provided
+    if (filters.status && filters.status !== "all") {
+      ordersQuery = query(ordersQuery, where("status", "==", filters.status));
+    }
+    
+    // Always sort by creation date (newest first)
+    ordersQuery = query(ordersQuery, orderBy("createdAt", "desc"));
+    
+    // Set up real-time listener
+    const unsubscribe = onSnapshot(ordersQuery, (querySnapshot) => {
+      const orders = [];
+      querySnapshot.forEach((doc) => {
+        orders.push({
+          id: doc.id,
+          ...doc.data()
+        });
+      });
+      
+      callback({ success: true, orders });
+    }, (error) => {
+      console.error("Error listening to orders:", error);
+      callback({ success: false, error: error.message });
+    });
+    
+    return unsubscribe;
+  } catch (error) {
+    console.error("Error setting up orders listener:", error);
+    callback({ success: false, error: error.message });
+    return null;
   }
 };
 
@@ -1484,6 +1899,99 @@ export const resetSystemSettings = async () => {
       settings: DEFAULT_SETTINGS 
     };
   } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Assign delivery with schedule and update delivery person status
+export const assignDeliveryWithSchedule = async (orderId, deliveryPersonId, expectedAt = null) => {
+  try {
+    // Validate
+    if (!orderId || !deliveryPersonId) {
+      return { success: false, error: "Order ID and Delivery Person ID are required" };
+    }
+
+    // Get docs
+    const orderRef = doc(db, "orders", orderId);
+    const orderSnap = await getDoc(orderRef);
+    if (!orderSnap.exists()) return { success: false, error: "Order not found" };
+    const deliveryRef = doc(db, "users", deliveryPersonId);
+    const deliverySnap = await getDoc(deliveryRef);
+    if (!deliverySnap.exists()) return { success: false, error: "Delivery person not found" };
+
+    const orderData = orderSnap.data();
+    const deliveryData = deliverySnap.data();
+
+    // Update order with delivery and schedule
+    const updatePayload = {
+      deliveryPersonId,
+      deliveryPersonName: deliveryData.displayName || deliveryData.email,
+      status: "Out for Delivery",
+      updatedAt: new Date()
+    };
+    if (expectedAt instanceof Date) {
+      updatePayload.expectedDeliveryAt = expectedAt;
+    }
+    await updateDoc(orderRef, updatePayload);
+
+    // Mark delivery person Busy
+    try {
+      await updateDoc(deliveryRef, {
+        status: "Busy",
+        updatedAt: new Date()
+      });
+    } catch (e) {
+      console.warn("Failed to update delivery person status:", e?.message);
+    }
+
+    // Notifications
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4321'}/api/notifications/delivery-assignment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          order: { ...orderData, orderId: orderData.orderId || orderId, expectedDeliveryAt: expectedAt || null },
+          deliveryPerson: { ...deliveryData, uid: deliveryPersonId }
+        })
+      });
+      const notificationResult = await response.json();
+      console.log('Delivery assignment (scheduled) notification result:', notificationResult);
+    } catch (notificationError) {
+      console.error('Failed to send delivery assignment notification:', notificationError);
+    }
+
+    // Push notification to delivery person
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4321'}/api/notifications/push`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          userId: deliveryPersonId,
+          notification: {
+            title: 'New Delivery Assignment',
+            body: `Order #${orderData.orderId || orderId} assigned to you` ,
+            data: {
+              type: 'delivery_assignment',
+              orderId: orderData.orderId || orderId
+            }
+          }
+        })
+      });
+      const pushResult = await response.json();
+      console.log('Push notification result:', pushResult);
+    } catch (pushError) {
+      console.error('Failed to send push notification:', pushError);
+    }
+
+    return { success: true, message: 'Delivery assigned with schedule' };
+  } catch (error) {
+    console.error("assignDeliveryWithSchedule error:", error);
     return { success: false, error: error.message };
   }
 };

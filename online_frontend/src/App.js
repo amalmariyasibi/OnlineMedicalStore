@@ -8,9 +8,12 @@ import ForgotPassword from "./pages/ForgotPassword";
 import EmailVerification from "./pages/EmailVerification";
 import DeliveryDashboard from "./pages/DeliveryDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminAssignDelivery from "./pages/AdminAssignDelivery";
+import AdminCartMonitor from "./pages/AdminCartMonitor";
 import Unauthorized from "./pages/Unauthorized";
 import ProtectedRoute from "./components/ProtectedRoute";
-import Products from "./pages/Products";
+import Products from "./pages/ProductsCombined"; // WORKING VERSION - Fixed loading issues
+import ProductsSimple from "./pages/ProductsSimple";
 import ProductDetail from "./pages/ProductDetail";
 import AdminProducts from "./pages/AdminProducts";
 import ProductForm from "./pages/ProductForm";
@@ -18,13 +21,16 @@ import Medicines from "./pages/Medicines";
 import MedicineDetail from "./pages/MedicineDetail";
 import AdminMedicines from "./pages/AdminMedicines";
 import MedicineForm from "./pages/MedicineForm";
-import Cart from "./pages/Cart";
-import Checkout from "./pages/Checkout";
+import Cart from "./pages/CartEnhanced";
+import Checkout from "./pages/CheckoutEnhanced";
 import OrderConfirmation from "./pages/OrderConfirmation";
 import Prescriptions from "./pages/Prescriptions";
+import Orders from "./pages/Orders";
+import OrderDetail from "./pages/OrderDetail";
 import UserDashboard from "./pages/user/Dashboard";
+import Notifications from "./pages/Notifications";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { CartProvider } from "./contexts/CartContext";
+import { CartProvider } from "./contexts/CartContextSimple";
 import CartIcon from "./components/CartIcon";
 import { logoutUser } from "./firebase";
 
@@ -228,8 +234,8 @@ const Navigation = ({ user, onLogout }) => {
                 <Link to="/cart" className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
                   Your Cart
                 </Link>
-                <Link to="/order-history" className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
-                  Order History
+                <Link to="/orders" className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
+                  My Orders
                 </Link>
                 <Link to="/prescriptions" className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
                   My Prescriptions
@@ -362,6 +368,21 @@ function App() {
                 <Prescriptions />
               </ProtectedRoute>
             } />
+            <Route path="/orders" element={
+              <ProtectedRoute>
+                <Orders />
+              </ProtectedRoute>
+            } />
+            <Route path="/orders/:orderId" element={
+              <ProtectedRoute>
+                <OrderDetail />
+              </ProtectedRoute>
+            } />
+            {/* <Route path="/payment-test" element={
+              <ProtectedRoute>
+                <PaymentTest />
+              </ProtectedRoute>
+            } /> */}
             <Route path="/user-dashboard" element={
               <ProtectedRoute>
                 <UserDashboard />
@@ -377,6 +398,11 @@ function App() {
             <Route path="/admin/orders" element={
               <ProtectedRoute allowedRoles={["admin"]}>
                 <div className="p-8 text-center text-xl">Order Management (Coming Soon)</div>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/orders/assign/:orderId" element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminAssignDelivery />
               </ProtectedRoute>
             } />
             <Route path="/admin/reports" element={
@@ -438,9 +464,15 @@ function App() {
                 <MedicineForm />
               </ProtectedRoute>
             } />
+            
             <Route path="/admin" element={
                <ProtectedRoute allowedRoles={["admin"]}>
                  <AdminDashboard />
+               </ProtectedRoute>
+             } />
+             <Route path="/admin/cart-monitor" element={
+               <ProtectedRoute allowedRoles={["admin"]}>
+                 <AdminCartMonitor />
                </ProtectedRoute>
              } />
              <Route path="/admin/prescriptions" element={

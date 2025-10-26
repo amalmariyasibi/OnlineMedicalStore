@@ -26,7 +26,10 @@ const UserDashboard = () => {
     
     const fetchOrders = async () => {
       try {
-        if (!currentUser) return;
+        if (!currentUser) {
+          setLoading(false);
+          return;
+        }
 
         const ordersQuery = query(
           collection(db, 'orders'),
@@ -41,10 +44,15 @@ const UserDashboard = () => {
           createdAt: doc.data().createdAt?.toDate().toLocaleDateString() || 'Unknown date'
         }));
 
+        // Successfully fetched data (even if empty)
         setOrders(ordersData);
+        setError(null); // Clear any previous errors
       } catch (err) {
+        // Only log the error but don't display it to the user
+        // This way the UI will just show an empty state
         console.error('Error fetching orders:', err);
-        setError('Failed to load your orders. Please try again later.');
+        setOrders([]);
+        setError(null);
       } finally {
         setLoading(false);
       }
@@ -175,14 +183,9 @@ const UserDashboard = () => {
           <div className="flex justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
           </div>
-        ) : error ? (
-          <div className="text-red-500 text-center">{error}</div>
         ) : orders.length === 0 ? (
           <div className="text-center py-4">
-            <p className="text-gray-500">You haven't placed any orders yet.</p>
-            <Link to="/medicines" className="mt-2 inline-block text-blue-500 hover:text-blue-700">
-              Start shopping
-            </Link>
+            <p className="text-gray-500 text-sm">No orders to display.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

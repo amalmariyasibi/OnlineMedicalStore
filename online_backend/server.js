@@ -8,6 +8,8 @@ const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const customerRoutes = require("./routes/customerRoutes");
 const deliveryRoutes = require("./routes/deliveryRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
+const paymentRoutes = require("./routes/payment");
 
 dotenv.config();
 const app = express();
@@ -28,6 +30,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/customer", customerRoutes);
 app.use("/api/delivery", deliveryRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/payment", paymentRoutes);
 
 const PORT = process.env.PORT || 4321;
 app.listen(PORT, () => {
