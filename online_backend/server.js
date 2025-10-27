@@ -14,11 +14,26 @@ const paymentRoutes = require("./routes/payment");
 dotenv.config();
 const app = express();
 
+// Add request logging for debugging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
+
 app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
 connectDB();
+
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.json({ 
+    status: "OK", 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
 
 // Routes
 app.get("/", (req, res) => {
@@ -32,6 +47,16 @@ app.use("/api/customer", customerRoutes);
 app.use("/api/delivery", deliveryRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/payment", paymentRoutes);
+
+// Add a catch-all route for debugging
+app.use("*", (req, res) => {
+  console.log(`404 - Route not found: ${req.originalUrl}`);
+  res.status(404).json({ 
+    message: "Route not found", 
+    path: req.originalUrl,
+    method: req.method
+  });
+});
 
 // Export the app for Vercel
 module.exports = app;
