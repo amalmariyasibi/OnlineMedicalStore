@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getAllProducts } from "../firebase";
 
-function Products() {
+function Products({ title = "Products" }) {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   
@@ -95,7 +95,7 @@ function Products() {
     <div className="min-h-screen bg-gray-100 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Products</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
           <div className="text-sm text-gray-600">
             {currentUser ? `Logged in as: ${currentUser.email}` : 'Not logged in'}
           </div>

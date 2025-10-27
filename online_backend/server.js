@@ -48,8 +48,8 @@ app.use("/api/delivery", deliveryRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/payment", paymentRoutes);
 
-// Add a catch-all route for debugging
-app.use("*", (req, res) => {
+// Add a catch-all route for debugging (using proper Express syntax)
+app.use((req, res) => {
   console.log(`404 - Route not found: ${req.originalUrl}`);
   res.status(404).json({ 
     message: "Route not found", 

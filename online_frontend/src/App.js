@@ -29,6 +29,8 @@ import Orders from "./pages/Orders";
 import OrderDetail from "./pages/OrderDetail";
 import UserDashboard from "./pages/user/Dashboard";
 import Notifications from "./pages/Notifications";
+import About from "./pages/About";
+import Contact from "./pages/Contact";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { CartProvider } from "./contexts/CartContextSimple";
 import CartIcon from "./components/CartIcon";
@@ -445,7 +447,7 @@ function App() {
             } />
             
             {/* Medicine routes */}
-            <Route path="/medicines" element={<Medicines />} />
+            <Route path="/medicines" element={<Products title="Medicines" />} />
             <Route path="/medicines/:medicineId" element={<MedicineDetail />} />
             
             {/* Admin medicine management routes */}
@@ -481,8 +483,8 @@ function App() {
                </ProtectedRoute>
              } />
             
-            <Route path="/about" element={<div className="p-8 text-center text-xl">About Us Page (Coming Soon)</div>} />
-            <Route path="/contact" element={<div className="p-8 text-center text-xl">Contact Page (Coming Soon)</div>} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
             </Routes>
           </AuthWrapper>
         </CartProvider>
