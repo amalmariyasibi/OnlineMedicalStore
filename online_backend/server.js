@@ -33,7 +33,13 @@ app.use("/api/delivery", deliveryRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/payment", paymentRoutes);
 
-const PORT = process.env.PORT || 4321;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+// Export the app for Vercel
+module.exports = app;
+
+// Only listen locally when not in Vercel environment
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 4321;
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+  });
+}
