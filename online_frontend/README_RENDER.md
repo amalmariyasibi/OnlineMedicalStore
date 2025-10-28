@@ -1,0 +1,58 @@
+# Deploying Frontend to Render
+
+This guide explains how to deploy the Online Medical Store frontend to Render.
+
+## Prerequisites
+
+1. A Render account (https://render.com)
+2. A GitHub/GitLab account connected to Render
+3. The backend API deployed and accessible (needed for REACT_APP_API_URL)
+
+## Deployment Steps
+
+1. Push your code to a GitHub/GitLab repository
+2. Go to Render Dashboard (https://dashboard.render.com)
+3. Click "New +" and select "Static Site"
+4. Connect your repository
+5. Configure the following settings:
+   - Name: online-medical-store-frontend
+   - Branch: main (or your default branch)
+   - Root Directory: Leave empty (or specify if your frontend is in a subdirectory)
+   - Build Command: `npm run build`
+   - Publish Directory: `build`
+
+## Environment Variables
+
+Set the following environment variables in Render:
+
+| Variable | Description | Example Value |
+|----------|-------------|---------------|
+| REACT_APP_API_URL | URL of your deployed backend API | https://your-backend.onrender.com |
+| REACT_APP_FIREBASE_API_KEY | Firebase API key | AIzaSyAjj6Dnah51Dkvg9rYcdSEZbJlJVyw1DMM |
+| REACT_APP_FIREBASE_AUTH_DOMAIN | Firebase auth domain | medihaven-78f6d.firebaseapp.com |
+| REACT_APP_FIREBASE_PROJECT_ID | Firebase project ID | medihaven-78f6d |
+| REACT_APP_FIREBASE_STORAGE_BUCKET | Firebase storage bucket | medihaven-78f6d.appspot.com |
+| REACT_APP_FIREBASE_MESSAGING_SENDER_ID | Firebase messaging sender ID | 935058134424 |
+| REACT_APP_FIREBASE_APP_ID | Firebase app ID | 1:935058134424:web:5a4af882d150f3ddea07ed |
+| REACT_APP_RAZORPAY_KEY_ID | Razorpay key ID | rzp_test_RH9Kx0Ibt9neI6 |
+
+## Important Notes
+
+1. Make sure to update `REACT_APP_API_URL` with your actual backend URL after deploying the backend
+2. The frontend will automatically redirect API calls to the backend URL specified in REACT_APP_API_URL
+3. Firebase configuration should match your Firebase project settings
+4. For production, consider using environment-specific Razorpay keys
+
+## Custom Domain (Optional)
+
+1. In Render dashboard, go to your static site
+2. Click "Settings" tab
+3. Scroll to "Custom Domains"
+4. Follow the instructions to add your domain
+
+## Troubleshooting
+
+- If the site doesn't load properly, check that all environment variables are set correctly
+- Make sure the REACT_APP_API_URL points to your deployed backend
+- Check browser console for any errors
+- Verify that the build completes successfully in Render logs
