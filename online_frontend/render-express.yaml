@@ -2,6 +2,7 @@ services:
   - type: web
     name: online-medical-store-frontend-express
     env: node
+    rootDir: online_frontend
     buildCommand: npm install && npm run build
     startCommand: npm run serve
     envVars:

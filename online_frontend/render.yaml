@@ -2,6 +2,7 @@ services:
   - type: web
     name: online-medical-store-frontend
     env: static
+    rootDir: online_frontend
     buildCommand: npm run build
     staticPublishPath: build
     envVars:

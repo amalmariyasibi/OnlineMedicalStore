@@ -17,7 +17,7 @@ This guide explains how to deploy the Online Medical Store frontend to Render.
 5. Configure the following settings:
    - Name: online-medical-store-frontend
    - Branch: main (or your default branch)
-   - Root Directory: Leave empty (or specify if your frontend is in a subdirectory)
+   - Root Directory: `online_frontend` (important: this is required because the frontend files are in a subdirectory)
    - Build Command: `npm run build`
    - Publish Directory: `build`
 
@@ -42,6 +42,7 @@ Set the following environment variables in Render:
 2. The frontend will automatically redirect API calls to the backend URL specified in REACT_APP_API_URL
 3. Firebase configuration should match your Firebase project settings
 4. For production, consider using environment-specific Razorpay keys
+5. The Root Directory must be set to `online_frontend` because that's where the package.json file is located
 
 ## Custom Domain (Optional)
 
@@ -56,3 +57,4 @@ Set the following environment variables in Render:
 - Make sure the REACT_APP_API_URL points to your deployed backend
 - Check browser console for any errors
 - Verify that the build completes successfully in Render logs
+- Ensure the Root Directory is set to `online_frontend` in your Render settings
