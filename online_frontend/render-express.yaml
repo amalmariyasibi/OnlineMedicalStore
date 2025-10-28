@@ -2,9 +2,10 @@ services:
   - type: web
     name: online-medical-store-frontend-express
     env: node
-    rootDir: online_frontend
-    buildCommand: npm install && npm run build
-    startCommand: npm run serve
+    # Note: If using this blueprint, ensure the root directory is set to 'online_frontend' in the Render dashboard
+    # as Render may not properly recognize the rootDir property in all cases
+    buildCommand: cd online_frontend && npm install && npm run build
+    startCommand: cd online_frontend && npm run serve
     envVars:
       - key: REACT_APP_API_URL
         value: https://your-backend-url.com
