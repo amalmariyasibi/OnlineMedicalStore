@@ -39,6 +39,14 @@ Instead, it will copy all the configuration files and the transitive dependencie
 
 You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
 
+## Deployment to Render
+
+This frontend application can be deployed to Render as a static site.
+
+**Important**: The frontend files are located in the `online_frontend` subdirectory, so you must set the Root Directory to `online_frontend` in your Render settings.
+
+For detailed deployment instructions, see [README_RENDER.md](README_RENDER.md)
+
 ## Learn More
 
 You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
