@@ -8,16 +8,26 @@ This guide explains how to deploy the Online Medical Store frontend to Render.
 2. A GitHub/GitLab account connected to Render
 3. The backend API deployed and accessible (needed for REACT_APP_API_URL)
 
-## Critical Deployment Requirement
+## Solution 1: Root Repository Package.json (Recommended)
 
-**THE MOST IMPORTANT STEP:** You MUST manually set the Root Directory to `online_frontend` in the Render dashboard because the frontend files are in a subdirectory of the repository.
+We've added a [package.json](file:///d:/MINIPROJECT/ONLINE%20MEDICAL%20STORE%20(8)/ONLINE%20MEDICAL%20STORE/package.json) file at the root of the repository that delegates commands to the frontend directory. This should resolve the package.json not found issue.
 
-If you don't do this, you will continue to get the error:
-```
-Could not read package.json: Error: ENOENT: no such file or directory, open '/opt/render/project/src/package.json'
-```
+To use this approach:
 
-## Deployment Steps
+1. Push your code to a GitHub/GitLab repository
+2. Go to Render Dashboard (https://dashboard.render.com)
+3. Click "New +" and select "Static Site"
+4. Connect your repository
+5. Configure the following settings:
+   - Name: online-medical-store-frontend
+   - Branch: main (or your default branch)
+   - Root Directory: Leave empty (use repository root)
+   - Build Command: `npm run build`
+   - Publish Directory: `online_frontend/build`
+
+## Solution 2: Manual Root Directory Setting
+
+If the first approach doesn't work, you can manually set the Root Directory:
 
 1. Push your code to a GitHub/GitLab repository
 2. Go to Render Dashboard (https://dashboard.render.com)
@@ -51,9 +61,14 @@ Set the following environment variables in Render:
 2. The frontend will automatically redirect API calls to the backend URL specified in REACT_APP_API_URL
 3. Firebase configuration should match your Firebase project settings
 4. For production, consider using environment-specific Razorpay keys
-5. **THE ROOT DIRECTORY MUST BE SET TO `online_frontend` IN THE RENDER DASHBOARD**
-6. The render.yaml file in this repository may not be automatically detected by Render, so you must set these settings manually
-7. Even if you use the render.yaml file, you still need to manually verify the root directory setting
+
+## Common Issues and Troubleshooting
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed help with:
+- Payment API 404 errors
+- Firebase connection issues
+- Environment variable problems
+- CORS issues
 
 ## Custom Domain (Optional)
 
@@ -68,6 +83,4 @@ Set the following environment variables in Render:
 - Make sure the REACT_APP_API_URL points to your deployed backend
 - Check browser console for any errors
 - Verify that the build completes successfully in Render logs
-- **ENSURE THE ROOT DIRECTORY IS SET TO `online_frontend` IN YOUR RENDER SETTINGS**
-- If you continue to have issues, try creating a new static site in Render and manually entering all the settings above
-- The error "Could not read package.json" means the root directory is not set correctly
+- The error "Could not read package.json" means the root directory is not set correctly or the build command is not finding the package.json file

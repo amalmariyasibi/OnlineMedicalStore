@@ -2,9 +2,7 @@ services:
   - type: web
     name: online-medical-store-frontend
     env: static
-    # Note: If using this blueprint, ensure the root directory is set to 'online_frontend' in the Render dashboard
-    # as Render may not properly recognize the rootDir property in all cases
-    buildCommand: cd online_frontend && npm run build
+    buildCommand: cd online_frontend && npm install && npm run build
     staticPublishPath: online_frontend/build
     envVars:
       - key: REACT_APP_API_URL
