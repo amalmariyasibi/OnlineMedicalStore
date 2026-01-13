@@ -85,3 +85,34 @@ node test-auth.js
 6. Advanced analytics and reporting
 7. Inventory management system
 8. Prescription upload and verification
+
+# ONLINE MEDICAL STORE
+
+This is a full-stack e-commerce application for an online medical store.
+
+## Project Structure
+
+```
+ONLINE MEDICAL STORE/
+├── backend/                  # Primary backend (minimal routes)
+├── online_backend/         # Full backend with MVC structure
+└── online_frontend/        # React frontend application
+```
+
+## Quick Start
+
+1. **Frontend**: See `online_frontend/README.md`
+2. **Backend**: See `online_backend/README.md`
+
+## Deployment
+
+- **Frontend**: Can be deployed to Render as a static site. See `online_frontend/README_RENDER.md` for detailed instructions.
+- **Backend**: Can be deployed to Vercel. See `online_backend/README.md` for detailed instructions.
+
+A root-level [package.json](file:///d:/MINIPROJECT/ONLINE%20MEDICAL%20STORE%20(8)/ONLINE%20MEDICAL%20STORE/package.json) has been added to facilitate deployment by delegating commands to the appropriate subdirectories.
+
+## Development Setup
+
+1. Install dependencies in both frontend and backend directories
+2. Set up environment variables
+3. Start both servers separately

@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+<<<<<<< HEAD
 import { createOrder, getUserOrders } from "../firebase";
 import { analyzeDrugSafety } from "../services/drugInteractionService";
+=======
+import { createOrder, getUserOrders, getUserDefaultAddress, saveUserDefaultAddress } from "../firebase";
+>>>>>>> 6b541aa4df7f8c2e20ce9e1275451f0789ac1853
 
 // Load Razorpay script
 const loadRazorpayScript = () => {
@@ -142,6 +146,89 @@ function Checkout() {
     }
   }, [currentUser, buyNowItem]);
 
+  // Prefill from Firestore default address (highest priority)
+  useEffect(() => {
+    const loadDefaultAddress = async () => {
+      if (!currentUser?.uid) return;
+      try {
+        const res = await getUserDefaultAddress(currentUser.uid);
+        if (res.success && res.address) {
+          setDeliveryAddress((prev) => ({ ...prev, ...res.address }));
+        }
+      } catch (e) {
+        console.error('Failed to load default address:', e);
+      }
+    };
+    loadDefaultAddress();
+  }, [currentUser]);
+
+  // Load saved address from localStorage (fallback when no previous orders)
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    try {
+      const key = `address_${currentUser.uid}`;
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setDeliveryAddress((prev) => ({ ...prev, ...parsed }));
+      }
+    } catch (e) {
+      console.error('Failed to load saved address from localStorage:', e);
+    }
+  }, [currentUser]);
+
+  // Prefill delivery address from the user's latest order
+  useEffect(() => {
+    const prefillAddressFromLastOrder = async () => {
+      try {
+        if (!currentUser?.uid) return;
+        const result = await getUserOrders(currentUser.uid);
+        if (!result.success || !result.orders || result.orders.length === 0) return;
+        const latest = result.orders[0];
+
+        // Support both shapes: {shippingAddress:{...}} and legacy {deliveryAddress:{...}}
+        const addr = latest.shippingAddress || latest.deliveryAddress;
+        if (!addr) return;
+
+        // Detect format and map into deliveryAddress shape
+        const mapped = {
+          fullName: addr.fullName || [addr.firstName, addr.lastName].filter(Boolean).join(" ") || deliveryAddress.fullName,
+          mobile: addr.mobile || addr.phone || deliveryAddress.mobile,
+          pincode: addr.pincode || deliveryAddress.pincode,
+          locality: addr.locality || deliveryAddress.locality,
+          address: addr.address || deliveryAddress.address,
+          city: addr.city || deliveryAddress.city,
+          state: addr.state || deliveryAddress.state,
+          landmark: addr.landmark || deliveryAddress.landmark,
+          alternatePhone: addr.alternatePhone || deliveryAddress.alternatePhone
+        };
+
+        setDeliveryAddress((prev) => ({ ...prev, ...mapped }));
+      } catch (e) {
+        console.error("Failed to prefill address from last order:", e);
+      }
+    };
+
+    prefillAddressFromLastOrder();
+  }, [currentUser]);
+
+  // Persist address to localStorage whenever the user edits it
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    try {
+      const key = `address_${currentUser.uid}`;
+      // Only save if at least one meaningful field is filled
+      const { fullName, mobile, address, city, state, pincode } = deliveryAddress;
+      const hasData = [fullName, mobile, address, city, state, pincode]
+        .some((v) => (v || '').toString().trim().length > 0);
+      if (hasData) {
+        localStorage.setItem(key, JSON.stringify(deliveryAddress));
+      }
+    } catch (e) {
+      console.error('Failed to save address to localStorage:', e);
+    }
+  }, [deliveryAddress, currentUser]);
+
   const cartTotal = cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
   const itemCount = cartItems.reduce((count, item) => count + item.quantity, 0);
   const safetyAnalysis = analyzeDrugSafety({ items: cartItems });
@@ -214,6 +301,7 @@ function Checkout() {
       const result = await createOrder(orderData);
       
       if (result.success) {
+<<<<<<< HEAD
         // Persist this address locally for faster future checkouts
         try {
           if (currentUser?.uid) {
@@ -222,6 +310,10 @@ function Checkout() {
         } catch (e) {
           console.warn('Unable to save lastAddress to localStorage:', e);
         }
+=======
+        // save default address for future prefills
+        try { await saveUserDefaultAddress(currentUser.uid, deliveryAddress); } catch {}
+>>>>>>> 6b541aa4df7f8c2e20ce9e1275451f0789ac1853
         clearCartAndNavigate(result.orderId);
       } else {
         alert('Failed to place order: ' + result.error);
@@ -517,6 +609,8 @@ function Checkout() {
             console.warn('Unable to save lastAddress to localStorage:', e);
           }
           console.log('Order created successfully:', result.orderId);
+          // save default address for future prefills
+          try { await saveUserDefaultAddress(currentUser.uid, deliveryAddress); } catch {}
           clearCartAndNavigate(result.orderId);
         } else {
           console.error('Failed to create order:', result.error);

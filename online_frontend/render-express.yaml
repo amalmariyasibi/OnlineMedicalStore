@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: online-medical-store-frontend-express
+    env: node
+    # Note: If using this blueprint, ensure the root directory is set to 'online_frontend' in the Render dashboard
+    # as Render may not properly recognize the rootDir property in all cases
+    buildCommand: cd online_frontend && npm install && npm run build
+    startCommand: cd online_frontend && npm run serve
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://your-backend-url.com
+      - key: PORT
+        value: 3000
+      - key: REACT_APP_FIREBASE_API_KEY
+        value: AIzaSyAjj6Dnah51Dkvg9rYcdSEZbJlJVyw1DMM
+      - key: REACT_APP_FIREBASE_AUTH_DOMAIN
+        value: medihaven-78f6d.firebaseapp.com
+      - key: REACT_APP_FIREBASE_PROJECT_ID
+        value: medihaven-78f6d
+      - key: REACT_APP_FIREBASE_STORAGE_BUCKET
+        value: medihaven-78f6d.appspot.com
+      - key: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+        value: 935058134424
+      - key: REACT_APP_FIREBASE_APP_ID
+        value: 1:935058134424:web:5a4af882d150f3ddea07ed
+      - key: REACT_APP_RAZORPAY_KEY_ID
+        value: rzp_test_RH9Kx0Ibt9neI6

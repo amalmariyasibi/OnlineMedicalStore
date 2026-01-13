@@ -487,6 +487,32 @@ export const getUserData = async (userId) => {
   }
 };
 
+// Save a user's default shipping/delivery address to Firestore
+export const saveUserDefaultAddress = async (userId, address) => {
+  try {
+    if (!userId || !address) return { success: false, error: "Missing parameters" };
+    const userRef = doc(db, "users", userId);
+    await setDoc(userRef, { defaultAddress: address, updatedAt: new Date() }, { merge: true });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Get a user's default shipping/delivery address from Firestore
+export const getUserDefaultAddress = async (userId) => {
+  try {
+    if (!userId) return { success: false, error: "User ID is required" };
+    const userRef = doc(db, "users", userId);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) return { success: false, error: "User not found" };
+    const data = snap.data();
+    return { success: !!data.defaultAddress, address: data.defaultAddress || null };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
 // Product Management Functions
 
 // Get all products
@@ -1786,24 +1812,39 @@ export const getUserOrders = async (userId) => {
     if (!userId) {
       return { success: false, error: "User ID is required" };
     }
-    
-    const ordersQuery = query(
+
+    // First run a simple query without ordering (works without a composite index)
+    const simpleQuery = query(
       collection(db, "orders"),
-      where("userId", "==", userId),
-      orderBy("createdAt", "desc")
+      where("userId", "==", userId)
     );
-    
-    const querySnapshot = await getDocs(ordersQuery);
-    const orders = [];
-    
-    querySnapshot.forEach((doc) => {
-      orders.push({
-        id: doc.id,
-        ...doc.data()
-      });
-    });
-    
-    return { success: true, orders };
+    const simpleSnapshot = await getDocs(simpleQuery);
+
+    // Collect unsorted results (used as fallback)
+    const unsorted = [];
+    simpleSnapshot.forEach((d) => unsorted.push({ id: d.id, ...d.data() }));
+
+    // If no orders, return early
+    if (unsorted.length === 0) {
+      return { success: true, orders: [] };
+    }
+
+    // Try the sorted query; if it fails due to missing index, return unsorted
+    try {
+      const sortedQuery = query(
+        collection(db, "orders"),
+        where("userId", "==", userId),
+        orderBy("createdAt", "desc")
+      );
+      const sortedSnap = await getDocs(sortedQuery);
+      const sorted = [];
+      sortedSnap.forEach((d) => sorted.push({ id: d.id, ...d.data() }));
+      return { success: true, orders: sorted };
+    } catch (e) {
+      // Return unsorted results if index is missing or any failure occurs
+      console.warn("getUserOrders falling back to unsorted results:", e?.message);
+      return { success: true, orders: unsorted };
+    }
   } catch (error) {
     return { success: false, error: error.message };
   }
