@@ -3,6 +3,9 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const connectDB = require("./config/db");
 
+// Load environment variables before importing any routes/configs that use them
+dotenv.config();
+
 // Import routes
 const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
@@ -10,8 +13,10 @@ const customerRoutes = require("./routes/customerRoutes");
 const deliveryRoutes = require("./routes/deliveryRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const paymentRoutes = require("./routes/payment");
+const mlRoutes = require("./routes/mlRoutes");
+const feedbackRoutes = require("./routes/feedbackRoutes");
+const prescriptionRoutes = require("./routes/prescriptionRoutes");
 
-dotenv.config();
 const app = express();
 
 // Add request logging for debugging
@@ -47,6 +52,9 @@ app.use("/api/customer", customerRoutes);
 app.use("/api/delivery", deliveryRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/ml", mlRoutes);
+app.use("/api/feedback", feedbackRoutes);
+app.use("/api/prescriptions", prescriptionRoutes);
 
 // Add a catch-all route for debugging (using proper Express syntax)
 app.use((req, res) => {
