@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser, getUserData, getDeliveryOrders, updateOrderStatus, requestAndSaveFcmToken, onForegroundNotification } from "../firebase";
+import DeliveryMapPanel from "../components/DeliveryMapPanel";
 
 function DeliveryDashboard() {
   const navigate = useNavigate();
@@ -17,6 +18,9 @@ function DeliveryDashboard() {
   const [activeTab, setActiveTab] = useState('assigned');
   const [selectedForUpdate, setSelectedForUpdate] = useState(null);
   const [selectedForOtp, setSelectedForOtp] = useState(null);
+  const [mapOrder, setMapOrder] = useState(null);
+  const [ratingSummary, setRatingSummary] = useState(null);
+  const [ratingLoading, setRatingLoading] = useState(false);
 
   // Fetch user data and orders
   const fetchUserAndOrders = async () => {
@@ -92,6 +96,36 @@ function DeliveryDashboard() {
   useEffect(() => {
     fetchUserAndOrders();
   }, [navigate]);
+
+  // Load basic feedback summary for delivered orders
+  useEffect(() => {
+    const loadRatingSummary = async () => {
+      const deliveredOrderIds = orders.filter(o => o.status === 'Delivered').map(o => o.id);
+      if (!deliveredOrderIds.length) {
+        setRatingSummary(null);
+        return;
+      }
+
+      try {
+        setRatingLoading(true);
+        const baseUrl = process.env.REACT_APP_API_URL || '';
+        const query = encodeURIComponent(deliveredOrderIds.join(','));
+        const resp = await fetch(`${baseUrl}/api/feedback/delivery/summary?orderIds=${query}`);
+        if (!resp.ok) {
+          setRatingSummary(null);
+          return;
+        }
+        const data = await resp.json();
+        setRatingSummary(data);
+      } catch (e) {
+        setRatingSummary(null);
+      } finally {
+        setRatingLoading(false);
+      }
+    };
+
+    loadRatingSummary();
+  }, [orders]);
 
   // Register for web push notifications (delivery users)
   useEffect(() => {
@@ -425,6 +459,39 @@ function DeliveryDashboard() {
             </div>
           </div>
 
+          {/* Rating Summary Card */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="bg-white border rounded-lg p-4 lg:col-span-1">
+              <p className="text-xs text-gray-500 mb-1">Customer Rating</p>
+              {ratingLoading ? (
+                <p className="text-sm text-gray-500">Loading rating...</p>
+              ) : ratingSummary && ratingSummary.count > 0 ? (
+                <>
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {ratingSummary.averageRating?.toFixed(1)} / 5
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Based on {ratingSummary.count} delivered orders</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-gray-600">
+                    <div>
+                      <p className="font-medium text-green-700">Positive</p>
+                      <p>{ratingSummary.positive}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-yellow-700">Neutral</p>
+                      <p>{ratingSummary.neutral}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-red-700">Negative</p>
+                      <p>{ratingSummary.negative}</p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">No feedback received yet from delivered orders.</p>
+              )}
+            </div>
+          </div>
+
           {/* Assigned Orders */}
           {activeTab === 'assigned' && (
           <section className="bg-white border rounded-lg">
@@ -487,6 +554,12 @@ function DeliveryDashboard() {
                           className="px-3 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                         >Update Status</button>
                       )}
+                      {(order.status === 'Picked Up' || order.status === 'Out for Delivery') && (
+                        <button
+                          onClick={() => setMapOrder(order)}
+                          className="px-3 py-2 text-sm rounded-md border border-blue-500 text-blue-600 hover:bg-blue-50"
+                        >Live Map</button>
+                      )}
                       {order.status === 'Out for Delivery' && (
                         <>
                           <button
@@ -501,7 +574,15 @@ function DeliveryDashboard() {
                           >Update Status</button>
                         </>
                       )}
-                      <button onClick={() => { setSelectedForUpdate(order); setActiveTab('update'); }} className="px-3 py-2 text-sm rounded-md border">View Details</button>
+                      <button
+                        onClick={() => {
+                          setSelectedForUpdate(order);
+                          setActiveTab('update');
+                        }}
+                        className="px-3 py-2 text-sm rounded-md border"
+                      >
+                        View Details
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -609,6 +690,15 @@ function DeliveryDashboard() {
         </main>
       </div>
       
+      {mapOrder && user && (
+        <DeliveryMapPanel
+          deliveryPersonId={user.uid}
+          orderId={mapOrder.id}
+          customerLocation={mapOrder.customerLocation || null}
+          onClose={() => setMapOrder(null)}
+        />
+      )}
+
       {/* Success Message */}
       {success && (
         <div className="fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded shadow-lg">

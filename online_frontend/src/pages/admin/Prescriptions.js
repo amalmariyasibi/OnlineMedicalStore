@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getAllPrescriptions, updatePrescription } from '../../services/prescriptionService';
+import { getAllPrescriptions, updatePrescription, getSignedUrl } from '../../services/prescriptionService';
 import { useAuth } from '../../contexts/AuthContext';
 
 const AdminPrescriptions = () => {
@@ -12,6 +12,8 @@ const AdminPrescriptions = () => {
   const [selectedPrescription, setSelectedPrescription] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [signedUrl, setSignedUrl] = useState(null);
+  const [loadingSignedUrl, setLoadingSignedUrl] = useState(false);
 
   useEffect(() => {
     const fetchPrescriptions = async () => {
@@ -23,13 +25,13 @@ const AdminPrescriptions = () => {
       try {
         setLoading(true);
         setError('');
-        
+
         // Apply filters
         const filters = {};
         if (statusFilter !== 'all') {
           filters.status = statusFilter;
         }
-        
+
         const allPrescriptions = await getAllPrescriptions(filters);
         setPrescriptions(allPrescriptions);
       } catch (err) {
@@ -47,28 +49,50 @@ const AdminPrescriptions = () => {
     setStatusFilter(e.target.value);
   };
 
-  const handleViewPrescription = (prescription) => {
+  const handleViewPrescription = async (prescription) => {
     setSelectedPrescription(prescription);
     setShowModal(true);
+    setSignedUrl(null);
+    setLoadingSignedUrl(true);
+
+    try {
+      console.log('Viewing prescription:', prescription);
+      console.log('Using fileUrl:', prescription.fileUrl);
+
+      if (!prescription.fileUrl) {
+        setError('No file URL found for this prescription.');
+        // return; // Don't return, let it try logic below just in case, or show error
+      }
+
+      // Use the stored fileUrl directly
+      setSignedUrl(prescription.fileUrl);
+      // const url = await getSignedUrl(prescription.fileName, prescription.resourceType, prescription.format);
+      // setSignedUrl(url);
+    } catch (err) {
+      console.error('Error getting signed URL:', err);
+      setError('Failed to load prescription file. Please try again.');
+    } finally {
+      setLoadingSignedUrl(false);
+    }
   };
 
   const handleUpdateStatus = async (prescriptionId, newStatus) => {
     try {
       setError('');
       await updatePrescription(prescriptionId, { status: newStatus });
-      
+
       // Update the local state
-      setPrescriptions(prevPrescriptions => 
-        prevPrescriptions.map(p => 
+      setPrescriptions(prevPrescriptions =>
+        prevPrescriptions.map(p =>
           p.id === prescriptionId ? { ...p, status: newStatus } : p
         )
       );
-      
+
       // If we're updating the currently selected prescription, update that too
       if (selectedPrescription && selectedPrescription.id === prescriptionId) {
         setSelectedPrescription(prev => ({ ...prev, status: newStatus }));
       }
-      
+
       // Refresh the prescriptions list
       setRefreshTrigger(prev => prev + 1);
     } catch (err) {
@@ -80,6 +104,8 @@ const AdminPrescriptions = () => {
   const closeModal = () => {
     setShowModal(false);
     setSelectedPrescription(null);
+    setSignedUrl(null);
+    setLoadingSignedUrl(false);
   };
 
   // Helper function to format file size
@@ -120,7 +146,7 @@ const AdminPrescriptions = () => {
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Manage Prescriptions</h1>
-        
+
         <div className="flex items-center">
           <label htmlFor="status-filter" className="mr-2 text-sm font-medium text-gray-700">
             Filter by Status:
@@ -158,8 +184,8 @@ const AdminPrescriptions = () => {
               </svg>
               <h3 className="mt-2 text-sm font-medium text-gray-900">No prescriptions found</h3>
               <p className="mt-1 text-sm text-gray-500">
-                {statusFilter !== 'all' 
-                  ? `No prescriptions with status "${statusFilter}" found.` 
+                {statusFilter !== 'all'
+                  ? `No prescriptions with status "${statusFilter}" found.`
                   : "There are no prescriptions in the system yet."}
               </p>
             </div>
@@ -184,7 +210,7 @@ const AdminPrescriptions = () => {
                           </p>
                         </div>
                       </div>
-                      
+
                       <div className="mt-2 sm:flex sm:justify-between">
                         <div className="sm:flex">
                           <p className="flex items-center text-sm text-gray-500">
@@ -209,7 +235,7 @@ const AdminPrescriptions = () => {
                           </p>
                         </div>
                       </div>
-                      
+
                       <div className="mt-4 flex justify-end space-x-3">
                         <button
                           type="button"
@@ -218,7 +244,7 @@ const AdminPrescriptions = () => {
                         >
                           View
                         </button>
-                        
+
                         {prescription.status === 'pending' && (
                           <>
                             <button
@@ -263,43 +289,59 @@ const AdminPrescriptions = () => {
                 </svg>
               </button>
             </div>
-            
+
             <div className="px-6 py-4 max-h-[calc(100vh-10rem)] overflow-y-auto">
-              {selectedPrescription.contentType.includes('image') ? (
-                <img 
-                  src={selectedPrescription.fileUrl} 
-                  alt="Prescription" 
-                  className="w-full h-auto max-h-[70vh] object-contain"
-                />
-              ) : selectedPrescription.contentType.includes('pdf') ? (
-                <div className="aspect-w-16 aspect-h-9">
-                  <iframe 
-                    src={`${selectedPrescription.fileUrl}#toolbar=0`} 
-                    title="Prescription PDF"
-                    className="w-full h-[70vh]"
-                  ></iframe>
+              {loadingSignedUrl ? (
+                <div className="flex justify-center items-center h-64">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
                 </div>
+              ) : signedUrl ? (
+                <>
+                  {selectedPrescription.contentType.includes('image') ? (
+                    <img
+                      src={signedUrl}
+                      alt="Prescription"
+                      className="w-full h-auto max-h-[70vh] object-contain"
+                    />
+                  ) : selectedPrescription.contentType.includes('pdf') ? (
+                    <div className="aspect-w-16 aspect-h-9">
+                      <iframe
+                        src={`${signedUrl}#toolbar=0`}
+                        title="Prescription PDF"
+                        className="w-full h-[70vh]"
+                      ></iframe>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <p>This file type cannot be previewed.</p>
+                      <a
+                        href={signedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
+                      >
+                        Download File
+                      </a>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="text-center py-8">
-                  <p>This file type cannot be previewed.</p>
-                  <a 
-                    href={selectedPrescription.fileUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-                  >
-                    Download File
-                  </a>
+                  <p className="text-red-600 font-bold">Failed to load prescription file.</p>
+                  <p className="text-sm text-gray-500 mt-2">File URL: {selectedPrescription.fileUrl || 'MISSING'}</p>
+                  <p className="text-sm text-gray-500">Resource Type: {selectedPrescription.resourceType || 'MISSING'}</p>
+                  <div className="mt-4 p-2 bg-gray-100 text-left text-xs overflow-auto max-h-40">
+                    <pre>{JSON.stringify(selectedPrescription, null, 2)}</pre>
+                  </div>
                 </div>
               )}
-              
               {selectedPrescription.notes && (
                 <div className="mt-4 p-4 bg-gray-50 rounded-md">
                   <h4 className="text-sm font-medium text-gray-900">Notes from User:</h4>
                   <p className="mt-1 text-sm text-gray-600">{selectedPrescription.notes}</p>
                 </div>
               )}
-              
+
               <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-gray-500">User ID</p>
@@ -309,9 +351,9 @@ const AdminPrescriptions = () => {
                   <p className="text-gray-500">Status</p>
                   <p className="font-medium">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                      ${selectedPrescription.status === 'approved' ? 'bg-green-100 text-green-800' : 
-                        selectedPrescription.status === 'rejected' ? 'bg-red-100 text-red-800' : 
-                        'bg-yellow-100 text-yellow-800'}`}
+                      ${selectedPrescription.status === 'approved' ? 'bg-green-100 text-green-800' :
+                        selectedPrescription.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'}`}
                     >
                       {selectedPrescription.status.charAt(0).toUpperCase() + selectedPrescription.status.slice(1)}
                     </span>
@@ -320,8 +362,8 @@ const AdminPrescriptions = () => {
                 <div>
                   <p className="text-gray-500">Uploaded On</p>
                   <p className="font-medium">
-                    {selectedPrescription.createdAt ? 
-                      selectedPrescription.createdAt.toLocaleDateString() : 
+                    {selectedPrescription.createdAt ?
+                      selectedPrescription.createdAt.toLocaleDateString() :
                       'Unknown date'}
                   </p>
                 </div>
@@ -331,7 +373,7 @@ const AdminPrescriptions = () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="px-6 py-4 border-t border-gray-200 flex justify-between">
               {selectedPrescription.status === 'pending' && (
                 <div className="flex space-x-3">

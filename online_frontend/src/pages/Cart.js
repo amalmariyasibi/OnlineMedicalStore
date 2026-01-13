@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../contexts/CartContextSimple";
+import { analyzeDrugSafety } from "../services/drugInteractionService";
 
 function Cart() {
   const { 
@@ -16,6 +17,7 @@ function Cart() {
   
   const [prescriptionFile, setPrescriptionFile] = useState(null);
   const navigate = useNavigate();
+  const safetyAnalysis = analyzeDrugSafety({ items });
   
   const handleQuantityChange = async (id, newQuantity) => {
     await updateQuantity(id, parseInt(newQuantity));
@@ -185,6 +187,44 @@ function Cart() {
                       <div className="text-base font-medium text-gray-900">₹{cartTotal.toFixed(2)}</div>
                     </div>
                   </div>
+
+                  {items.length > 0 && (
+                    <div className="mt-6 bg-red-50 border-l-4 border-red-400 p-4 rounded-md">
+                      <div className="flex">
+                        <div className="flex-shrink-0">
+                          <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.257 7.099c.765-1.36 2.722-1.36 3.486 0l2.829 4.971C15.31 13.431 14.523 15 13.242 15H6.758c-1.281 0-2.068-1.569-1.33-2.93l2.829-4.971zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-5a1 1 0 00-.894.553l-1.5 3A1 1 0 009.5 13h1a1 1 0 00.894-1.447l-1.5-3A1 1 0 0010 8z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-semibold text-red-800">
+                            Drug Interaction & Allergy Warnings
+                          </p>
+                          {safetyAnalysis.interactions.length > 0 || safetyAnalysis.allergyWarnings.length > 0 ? (
+                            <ul className="mt-2 text-xs text-red-700 list-disc list-inside space-y-1">
+                              {safetyAnalysis.interactions.map((issue, idx) => (
+                                <li key={`interaction-${idx}`}>
+                                  {issue.message}
+                                </li>
+                              ))}
+                              {safetyAnalysis.allergyWarnings.map((issue, idx) => (
+                                <li key={`allergy-${idx}`}>
+                                  {issue.message}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-2 text-xs text-red-700">
+                              No major interaction or allergy warnings detected for your current medicines.
+                            </p>
+                          )}
+                          <p className="mt-2 text-[11px] text-red-600">
+                            This information is for safety assistance only and does not replace advice from your doctor or pharmacist.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   
                   {prescriptionRequired && (
                     <div className="mt-6">

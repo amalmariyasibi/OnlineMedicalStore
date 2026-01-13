@@ -46,6 +46,7 @@ const UserDashboard = () => {
 
         // Successfully fetched data (even if empty)
         setOrders(ordersData);
+
         setError(null); // Clear any previous errors
       } catch (err) {
         // Only log the error but don't display it to the user
@@ -137,6 +138,20 @@ const UserDashboard = () => {
             <div>
               <h3 className="font-medium">Shop Medicines</h3>
               <p className="text-sm text-gray-500">Browse our medicine catalog</p>
+            </div>
+          </div>
+        </Link>
+        
+        <Link to="/health-profile" className="bg-white shadow rounded-lg p-6 hover:bg-blue-50 transition duration-200">
+          <div className="flex items-center">
+            <div className="rounded-full bg-purple-100 p-3 mr-4">
+              <svg className="h-6 w-6 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-medium">Health Profile &amp; Diet Management</h3>
+              <p className="text-sm text-gray-500">View AI health recommendations and diet insights</p>
             </div>
           </div>
         </Link>

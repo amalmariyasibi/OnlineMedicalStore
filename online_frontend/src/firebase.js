@@ -1105,22 +1105,16 @@ export const searchProducts = async (query) => {
     
     // Filter products by search term
     const filteredProducts = products.filter(product => {
-      try {
-        // Debug: Log each product name and whether it matches the search term
-        const nameMatch = product.name && product.name.toLowerCase().includes(searchTermLower);
-        const descMatch = product.description && product.description.toLowerCase().includes(searchTermLower);
-        const manuMatch = product.manufacturer && product.manufacturer.toLowerCase().includes(searchTermLower);
-        const catMatch = product.category && product.category.toLowerCase().includes(searchTermLower);
-        
-        const matches = nameMatch || descMatch || manuMatch || catMatch;
-        
-        console.log(`Product: ${product.name}, Matches: ${matches} (name: ${nameMatch}, desc: ${descMatch}, manu: ${manuMatch}, cat: ${catMatch})`);
-        
-        return matches;
-      } catch (filterError) {
-        console.error("Error filtering product:", product.name, filterError);
-        return false;
-      }
+      const nameMatch = product.name && product.name.toLowerCase().includes(searchTermLower);
+      const descMatch = product.description && product.description.toLowerCase().includes(searchTermLower);
+      const manuMatch = product.manufacturer && product.manufacturer.toLowerCase().includes(searchTermLower);
+      const catMatch = product.category && product.category.toLowerCase().includes(searchTermLower);
+      
+      const matches = nameMatch || descMatch || manuMatch || catMatch;
+      
+      console.log(`Product: ${product.name}, Matches: ${matches} (name: ${nameMatch}, desc: ${descMatch}, manu: ${manuMatch}, cat: ${catMatch})`);
+      
+      return matches;
     });
     
     console.log("Total search results:", filteredProducts.length);
@@ -1132,6 +1126,285 @@ export const searchProducts = async (query) => {
       error: error.message || "An error occurred while searching",
       isOffline: error.message && error.message.includes("offline")
     };
+  }
+};
+
+// --- Smart Recommendation Helpers (KNN-style on top of Firestore data) ---
+const textMatchScore = (a, b) => {
+  if (!a || !b) return 0;
+  const la = a.toString().toLowerCase();
+  const lb = b.toString().toLowerCase();
+  if (la === lb) return 1;
+  if (la.includes(lb) || lb.includes(la)) return 0.8;
+  return 0;
+};
+
+const priceSimilarity = (basePrice, otherPrice) => {
+  const a = Number(basePrice) || 0;
+  const b = Number(otherPrice) || 0;
+  if (!a || !b) return 0;
+  const diff = Math.abs(a - b);
+  const avg = (a + b) / 2;
+  if (!avg) return 0;
+  const ratio = diff / avg;
+  if (ratio < 0.1) return 1;      // almost same price
+  if (ratio < 0.25) return 0.6;   // within 25%
+  if (ratio < 0.5) return 0.3;    // within 50%
+  return 0;
+};
+
+const computeMedicineSimilarity = (base, candidate) => {
+  if (!base || !candidate || base.id === candidate.id) return 0;
+  let score = 0;
+
+  score += textMatchScore(base.genericName, candidate.genericName) * 5;
+  score += textMatchScore(base.category, candidate.category) * 3;
+  score += textMatchScore(base.manufacturer, candidate.manufacturer) * 2;
+  score += textMatchScore(base.dosage, candidate.dosage) * 1.5;
+  score += textMatchScore(base.sideEffects, candidate.sideEffects);
+  score += priceSimilarity(base.price, candidate.price);
+
+  if (base.requiresPrescription === candidate.requiresPrescription) {
+    score += 1;
+  }
+
+  return score;
+};
+
+// Suggest alternative & generic medicines for a given medicine
+export const getAlternativeMedicines = async (medicineId, options = {}) => {
+  try {
+    const { maxResults = 8, preferCheaper = true } = options;
+
+    const targetResult = await getMedicineById(medicineId);
+    if (!targetResult.success) {
+      return { success: false, error: targetResult.error || "Medicine not found" };
+    }
+
+    const baseMedicine = targetResult.medicine;
+    const medicinesResult = await getAllMedicines({ nonExpired: true, inStock: true });
+    if (!medicinesResult.success) {
+      return { success: false, error: medicinesResult.error || "Failed to load medicines" };
+    }
+
+    const candidates = medicinesResult.medicines.filter(m => m.id !== baseMedicine.id && (m.stockQuantity || 0) > 0);
+
+    const scored = candidates
+      .map(m => ({
+        medicine: m,
+        score: computeMedicineSimilarity(baseMedicine, m)
+      }))
+      .filter(item => item.score > 0);
+
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (preferCheaper) {
+        return (Number(a.medicine.price) || 0) - (Number(b.medicine.price) || 0);
+      }
+      return 0;
+    });
+
+    const alternatives = scored.slice(0, maxResults).map(item => item.medicine);
+    return { success: true, alternatives, baseMedicine };
+  } catch (error) {
+    console.error("getAlternativeMedicines error:", error);
+    return { success: false, error: error.message || "Failed to get alternative medicines" };
+  }
+};
+
+// Suggest alternative & generic products (for items stored in products collection)
+export const getAlternativeProducts = async (productId, options = {}) => {
+  try {
+    const { maxResults = 8, preferCheaper = true } = options;
+
+    const baseResult = await getProductById(productId);
+    if (!baseResult.success) {
+      return { success: false, error: baseResult.error || "Product not found" };
+    }
+
+    const base = baseResult.product;
+    const allResult = await getAllProducts({ inStock: true });
+    if (!allResult.success) {
+      return { success: false, error: allResult.error || "Failed to load products" };
+    }
+
+    const candidates = (allResult.products || []).filter(p => p.id !== base.id && (p.stockQuantity || 0) > 0);
+
+    const scored = candidates
+      .map(p => ({
+        product: p,
+        score: computeMedicineSimilarity(
+          {
+            id: base.id,
+            genericName: base.genericName || base.name,
+            category: base.category,
+            manufacturer: base.manufacturer,
+            dosage: base.dosage,
+            sideEffects: base.sideEffects,
+            price: base.price,
+            requiresPrescription: base.requiresPrescription || false
+          },
+          {
+            id: p.id,
+            genericName: p.genericName || p.name,
+            category: p.category,
+            manufacturer: p.manufacturer,
+            dosage: p.dosage,
+            sideEffects: p.sideEffects,
+            price: p.price,
+            requiresPrescription: p.requiresPrescription || false
+          }
+        )
+      }))
+      .filter(item => item.score > 0);
+
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (preferCheaper) {
+        return (Number(a.product.price) || 0) - (Number(b.product.price) || 0);
+      }
+      return 0;
+    });
+
+    const alternatives = scored.slice(0, maxResults).map(item => item.product);
+    return { success: true, alternatives, baseProduct: base };
+  } catch (error) {
+    console.error("getAlternativeProducts error:", error);
+    return { success: false, error: error.message || "Failed to get alternative products" };
+  }
+};
+
+// Personalized "Recommended for You" using purchase history + similarity
+export const getRecommendedForUser = async (userId, options = {}) => {
+  try {
+    if (!userId) {
+      return { success: false, error: "User ID is required" };
+    }
+
+    const { maxResults = 10 } = options;
+    const ordersResult = await getUserOrders(userId);
+    if (!ordersResult.success) {
+      return { success: false, error: ordersResult.error || "Failed to load user orders" };
+    }
+
+    const frequency = new Map();
+    const purchasedIds = new Set();
+
+    ordersResult.orders.forEach(order => {
+      (order.items || []).forEach(item => {
+        const id = item.id || item.productId || item.medicineId;
+        if (!id) return;
+        const qty = Number(item.quantity) || 1;
+        purchasedIds.add(id);
+        frequency.set(id, (frequency.get(id) || 0) + qty);
+      });
+    });
+
+    // Cold start: no orders yet -> suggest cheap in-stock items
+    if (!frequency.size) {
+      const topProducts = await getAllProducts({ inStock: true });
+      const topMeds = await getAllMedicines({ inStock: true, nonExpired: true });
+      if (!topProducts.success && !topMeds.success) {
+        return { success: false, error: topProducts.error || topMeds.error || "No products available" };
+      }
+      const combined = [
+        ...(topProducts.success ? topProducts.products : []),
+        ...(topMeds.success ? topMeds.medicines : [])
+      ].filter(item => (item.stockQuantity || 0) > 0);
+
+      combined.sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+      return { success: true, recommendations: combined.slice(0, maxResults) };
+    }
+
+    // Use top-k frequently purchased medicines as anchors
+    const purchasesByFrequency = Array.from(frequency.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id]) => id);
+
+    const allMedsResult = await getAllMedicines({ inStock: true, nonExpired: true });
+    const allProductsResult = await getAllProducts({ inStock: true });
+
+    if (!allMedsResult.success && !allProductsResult.success) {
+      return { success: false, error: allMedsResult.error || allProductsResult.error || "Failed to load catalog" };
+    }
+
+    const medicineMap = new Map();
+    (allMedsResult.medicines || []).forEach(m => medicineMap.set(m.id, m));
+
+    const baseLiked = purchasesByFrequency
+      .map(id => medicineMap.get(id))
+      .filter(Boolean);
+
+    const scoredCandidates = [];
+
+    // Candidate medicines
+    (allMedsResult.medicines || []).forEach(med => {
+      if (purchasedIds.has(med.id) || (med.stockQuantity || 0) <= 0) return;
+      let best = 0;
+      baseLiked.forEach(base => {
+        const s = computeMedicineSimilarity(base, med);
+        if (s > best) best = s;
+      });
+      if (best > 0) {
+        scoredCandidates.push({ item: med, score: best });
+      }
+    });
+
+    // Candidate non-medicine products treated as pseudo-medicines
+    (allProductsResult.products || []).forEach(prod => {
+      if ((prod.stockQuantity || 0) <= 0) return;
+      const pseudoMed = {
+        id: prod.id,
+        name: prod.name,
+        genericName: prod.genericName || prod.name,
+        category: prod.category,
+        manufacturer: prod.manufacturer,
+        dosage: prod.dosage,
+        sideEffects: prod.sideEffects,
+        price: prod.price,
+        requiresPrescription: prod.requiresPrescription || false
+      };
+      let best = 0;
+      baseLiked.forEach(base => {
+        const s = computeMedicineSimilarity(base, pseudoMed);
+        if (s > best) best = s;
+      });
+      if (best > 0) {
+        scoredCandidates.push({ item: prod, score: best });
+      }
+    });
+
+    // If no similarity-based candidates, fall back to cheap items
+    if (!scoredCandidates.length) {
+      const fallback = [
+        ...(allMedsResult.medicines || []),
+        ...(allProductsResult.products || [])
+      ].filter(item => (item.stockQuantity || 0) > 0 && !purchasedIds.has(item.id));
+
+      fallback.sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+      return { success: true, recommendations: fallback.slice(0, maxResults) };
+    }
+
+    // Sort by similarity, then by price (cheaper first)
+    scoredCandidates.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return (Number(a.item.price) || 0) - (Number(b.item.price) || 0);
+    });
+
+    const seen = new Set();
+    const recommendations = [];
+    for (const candidate of scoredCandidates) {
+      if (recommendations.length >= maxResults) break;
+      if (seen.has(candidate.item.id)) continue;
+      seen.add(candidate.item.id);
+      recommendations.push(candidate.item);
+    }
+
+    return { success: true, recommendations };
+  } catch (error) {
+    console.error("getRecommendedForUser error:", error);
+    return { success: false, error: error.message || "Failed to get recommendations" };
   }
 };
 
@@ -1900,6 +2173,58 @@ export const resetSystemSettings = async () => {
     };
   } catch (error) {
     return { success: false, error: error.message };
+  }
+};
+
+// ===== Real-time Delivery Location Helpers =====
+
+// Update or create the current location for a delivery person
+export const updateDeliveryLocation = async (deliveryPersonId, { lat, lng, activeOrderId = null }) => {
+  try {
+    if (!deliveryPersonId || typeof lat !== "number" || typeof lng !== "number") {
+      return { success: false, error: "Invalid delivery location payload" };
+    }
+
+    const locRef = doc(db, "deliveryLocations", deliveryPersonId);
+    await setDoc(locRef, {
+      lat,
+      lng,
+      activeOrderId: activeOrderId || null,
+      updatedAt: new Date()
+    }, { merge: true });
+
+    return { success: true };
+  } catch (error) {
+    console.error("updateDeliveryLocation error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Subscribe to real-time updates for a delivery person's location
+export const onDeliveryLocationChange = (deliveryPersonId, callback) => {
+  try {
+    if (!deliveryPersonId) {
+      callback({ success: false, error: "Delivery person ID is required" });
+      return () => {};
+    }
+
+    const locRef = doc(db, "deliveryLocations", deliveryPersonId);
+    const unsubscribe = onSnapshot(locRef, (snap) => {
+      if (!snap.exists()) {
+        callback({ success: true, location: null });
+      } else {
+        callback({ success: true, location: { id: snap.id, ...snap.data() } });
+      }
+    }, (error) => {
+      console.error("onDeliveryLocationChange error:", error);
+      callback({ success: false, error: error.message });
+    });
+
+    return unsubscribe;
+  } catch (error) {
+    console.error("onDeliveryLocationChange setup error:", error);
+    callback({ success: false, error: error.message });
+    return () => {};
   }
 };
 

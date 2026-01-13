@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { seedDatabase } from "../seedData";
 import { useAuth } from "../contexts/AuthContext";
 import { addAllDummyProducts, addSingleDummyProduct } from "../utils/addDummyProducts";
+import { getRecommendedForUser } from "../firebase";
 
 function Home() {
   const [seeding, setSeeding] = useState(false);
@@ -10,6 +11,9 @@ function Home() {
   const [adding, setAdding] = useState(false);
   const [addMessage, setAddMessage] = useState("");
   const { currentUser } = useAuth();
+  const [recommendations, setRecommendations] = useState([]);
+  const [recLoading, setRecLoading] = useState(false);
+  const [recError, setRecError] = useState("");
 
   // Function to handle database seeding
   const handleSeedDatabase = async () => {
@@ -31,6 +35,30 @@ function Home() {
       setSeeding(false);
     }
   };
+
+  useEffect(() => {
+    const loadRecommendations = async () => {
+      if (!currentUser) {
+        setRecommendations([]);
+        return;
+      }
+      try {
+        setRecLoading(true);
+        setRecError("");
+        const result = await getRecommendedForUser(currentUser.uid, { maxResults: 8 });
+        if (result.success) {
+          setRecommendations(result.recommendations || []);
+        } else {
+          setRecError(result.error || "Failed to load recommendations");
+        }
+      } catch (e) {
+        setRecError(e.message || "Failed to load recommendations");
+      } finally {
+        setRecLoading(false);
+      }
+    };
+    loadRecommendations();
+  }, [currentUser]);
 
   // Handlers to add dummy products
   const handleAddSingleProduct = async () => {
@@ -163,6 +191,51 @@ function Home() {
           ))}
         </div>
       </div>
+
+      {/* Recommended for You (personalized, logged-in users) */}
+      {currentUser && (
+        <div className="bg-white py-12">
+          <div className="container mx-auto px-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-3xl font-bold text-gray-800">Recommended for You</h2>
+              {recLoading && (
+                <span className="text-sm text-gray-500">Loading your personalized suggestions...</span>
+              )}
+            </div>
+            {recError && !recLoading && (
+              <p className="text-sm text-red-600 mb-4">{recError}</p>
+            )}
+            {!recLoading && !recError && recommendations.length === 0 && (
+              <p className="text-sm text-gray-500 mb-4">
+                Start ordering medicines and products to see personalized suggestions here.
+              </p>
+            )}
+            {!recLoading && recommendations.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {recommendations.map((item) => (
+                  <div key={item.id} className="bg-gray-50 rounded-lg shadow-sm hover:shadow-md transition overflow-hidden">
+                    <img
+                      src={item.imageUrl || "https://placehold.co/300x200?text=Medicine"}
+                      alt={item.name}
+                      className="w-full h-40 object-cover"
+                    />
+                    <div className="p-4">
+                      <h3 className="font-semibold text-gray-900 text-sm truncate">{item.name}</h3>
+                      {item.genericName && (
+                        <p className="text-xs text-gray-500 truncate">Generic: {item.genericName}</p>
+                      )}
+                      <p className="mt-1 text-blue-600 font-bold text-sm">₹{Number(item.price || 0).toFixed(2)}</p>
+                      {item.category && (
+                        <p className="mt-1 text-xs text-gray-500 truncate">{item.category}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Featured Products - Show to all users */}
       <div className="bg-gray-100 py-12">

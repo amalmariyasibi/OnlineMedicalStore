@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getMedicineById } from "../firebase";
+import { getMedicineById, getAlternativeMedicines } from "../firebase";
 import { useCart } from "../contexts/CartContextSimple";
 import { useAuth } from "../contexts/AuthContext";
 import PrescriptionUpload from "../components/PrescriptionUpload";
@@ -15,6 +15,10 @@ function MedicineDetail() {
   const [addingToCart, setAddingToCart] = useState(false);
   const [cartMessage, setCartMessage] = useState("");
   const [showPrescriptionUpload, setShowPrescriptionUpload] = useState(false);
+  const [alternatives, setAlternatives] = useState([]);
+  const [altLoading, setAltLoading] = useState(false);
+  const [altError, setAltError] = useState("");
+
   const { addToCart, error: cartError } = useCart();
   const { currentUser } = useAuth();
 
@@ -75,6 +79,27 @@ function MedicineDetail() {
       window.removeEventListener('online', handleOnline);
     };
   }, [medicineId, error]);
+
+  useEffect(() => {
+    if (!medicineId) return;
+    const loadAlternatives = async () => {
+      try {
+        setAltLoading(true);
+        setAltError("");
+        const result = await getAlternativeMedicines(medicineId, { maxResults: 6, preferCheaper: true });
+        if (result.success) {
+          setAlternatives(result.alternatives || []);
+        } else {
+          setAltError(result.error || "Failed to load alternatives");
+        }
+      } catch (e) {
+        setAltError(e.message || "Failed to load alternatives");
+      } finally {
+        setAltLoading(false);
+      }
+    };
+    loadAlternatives();
+  }, [medicineId]);
 
   const handleQuantityChange = (e) => {
     const value = parseInt(e.target.value);
@@ -420,7 +445,7 @@ function MedicineDetail() {
                   >
                     {addingToCart ? (
                       <>
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
@@ -502,6 +527,61 @@ function MedicineDetail() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Alternative & Generic Medicines */}
+        <div className="mt-10 border-t border-gray-200 pt-10">
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-4">Alternative & Generic Medicines</h2>
+          {altLoading && (
+            <p className="text-gray-500 text-sm">Loading alternatives...</p>
+          )}
+          {altError && !altLoading && (
+            <p className="text-red-600 text-sm mb-4">{altError}</p>
+          )}
+          {!altLoading && !altError && alternatives.length === 0 && (
+            <p className="text-gray-500 text-sm">No close alternatives found for this medicine.</p>
+          )}
+          {!altLoading && alternatives.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {alternatives.map((alt) => (
+                <div
+                  key={alt.id}
+                  className="border border-gray-200 rounded-lg p-4 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => navigate(`/medicine/${alt.id}`)}
+                >
+                  <div>
+                    <div className="aspect-w-4 aspect-h-3 mb-3 overflow-hidden rounded-md bg-gray-100">
+                      <img
+                        src={alt.imageUrl || "https://via.placeholder.com/400x300?text=Medicine"}
+                        alt={alt.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <h3 className="text-sm font-semibold text-gray-900 truncate">{alt.name}</h3>
+                    {alt.genericName && (
+                      <p className="text-xs text-gray-500 truncate">Generic: {alt.genericName}</p>
+                    )}
+                    <p className="mt-1 text-sm text-gray-700 font-medium">₹{Number(alt.price || 0).toFixed(2)}</p>
+                    {alt.manufacturer && (
+                      <p className="mt-1 text-xs text-gray-500 truncate">{alt.manufacturer}</p>
+                    )}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {alt.requiresPrescription && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-800">
+                        Rx Required
+                      </span>
+                    )}
+                    {alt.stockQuantity > 0 && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-800">
+                        In Stock
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

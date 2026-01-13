@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getProductById } from "../firebase";
+import { getProductById, getAlternativeProducts } from "../firebase";
 import { useCart } from "../contexts/CartContextSimple";
 
 function ProductDetail() {
@@ -12,6 +12,9 @@ function ProductDetail() {
   const [error, setError] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState("description"); // "description", "features", "reviews"
+  const [alternatives, setAlternatives] = useState([]);
+  const [altLoading, setAltLoading] = useState(false);
+  const [altError, setAltError] = useState("");
 
   const handleQuantityChange = (e) => {
     const value = parseInt(e.target.value);
@@ -19,6 +22,48 @@ function ProductDetail() {
       setQuantity(value);
     }
   };
+
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const result = await getProductById(productId);
+        if (result.success) {
+          setProduct(result.product);
+        } else {
+          setError(result.error || "Failed to load product");
+        }
+      } catch (err) {
+        setError(err.message || "An error occurred");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProduct();
+  }, [productId]);
+
+  useEffect(() => {
+    if (!productId) return;
+    const loadAlternatives = async () => {
+      try {
+        setAltLoading(true);
+        setAltError("");
+        const result = await getAlternativeProducts(productId, { maxResults: 6, preferCheaper: true });
+        if (result.success) {
+          setAlternatives(result.alternatives || []);
+        } else {
+          setAltError(result.error || "Failed to load alternative products");
+        }
+      } catch (e) {
+        setAltError(e.message || "Failed to load alternative products");
+      } finally {
+        setAltLoading(false);
+      }
+    };
+    loadAlternatives();
+  }, [productId]);
 
   const handleAddToCart = async () => {
     try {
@@ -467,6 +512,55 @@ function ProductDetail() {
             </div>
           </div>
         )}
+
+        {/* Alternative & Generic Medicines for this product */}
+        <div className="mt-16 border-t border-gray-200 pt-10">
+          <h2 className="text-xl font-bold text-gray-900">Alternative & Generic Medicines</h2>
+          {altLoading && (
+            <p className="mt-2 text-sm text-gray-500">Loading alternatives...</p>
+          )}
+          {altError && !altLoading && (
+            <p className="mt-2 text-sm text-red-600">{altError}</p>
+          )}
+          {!altLoading && !altError && alternatives.length === 0 && (
+            <p className="mt-2 text-sm text-gray-500">
+              No close alternatives found for this item.
+            </p>
+          )}
+          {!altLoading && alternatives.length > 0 && (
+            <div className="mt-6 grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-4 xl:gap-x-8">
+              {alternatives.map((alt) => (
+                <div
+                  key={alt.id}
+                  className="group relative bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300 cursor-pointer"
+                  onClick={() => navigate(`/products/${alt.id}`)}
+                >
+                  <div className="w-full min-h-80 bg-gray-200 aspect-w-1 aspect-h-1 overflow-hidden group-hover:opacity-75 lg:h-80 lg:aspect-none">
+                    <img
+                      src={alt.imageUrl || "https://placehold.co/300x300?text=Medicine"}
+                      alt={alt.name}
+                      className="w-full h-full object-center object-cover lg:w-full lg:h-full"
+                    />
+                  </div>
+                  <div className="p-4">
+                    <div className="flex justify-between">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900 truncate">{alt.name}</h3>
+                        {alt.genericName && (
+                          <p className="mt-1 text-xs text-gray-500 truncate">Generic: {alt.genericName}</p>
+                        )}
+                        {alt.category && (
+                          <p className="mt-1 text-xs text-gray-500 truncate">{alt.category}</p>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-gray-900">₹{Number(alt.price || 0).toFixed(2)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

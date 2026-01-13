@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import OrderTrackingMap from '../components/OrderTrackingMap';
 
 const OrderDetail = () => {
   const { orderId } = useParams();
@@ -10,6 +11,10 @@ const OrderDetail = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [ratingOverall, setRatingOverall] = useState(0);
+  const [comment, setComment] = useState('');
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -68,6 +73,63 @@ const OrderDetail = () => {
 
     fetchOrderDetail();
   }, [currentUser, orderId, navigate]);
+
+  // Fetch existing feedback for delivered orders (if any)
+  useEffect(() => {
+    const loadFeedback = async () => {
+      if (!order || !order.status || order.status.toLowerCase() !== 'delivered') return;
+
+      try {
+        setFeedbackLoading(true);
+        const baseUrl = process.env.REACT_APP_API_URL || '';
+        const resp = await fetch(`${baseUrl}/api/feedback/my/${order.id}`);
+        if (!resp.ok) {
+          setFeedbackLoading(false);
+          return;
+        }
+        const data = await resp.json();
+        if (data && data.ratingOverall) {
+          setRatingOverall(data.ratingOverall);
+          setComment(data.comment || '');
+        }
+      } catch (e) {
+        // Silent fail - feedback is optional
+      } finally {
+        setFeedbackLoading(false);
+      }
+    };
+
+    loadFeedback();
+  }, [order]);
+
+  const handleSubmitFeedback = async (e) => {
+    e.preventDefault();
+    if (!order || ratingOverall < 1 || ratingOverall > 5) return;
+
+    try {
+      setFeedbackLoading(true);
+      setFeedbackMessage('');
+      const baseUrl = process.env.REACT_APP_API_URL || '';
+      const resp = await fetch(`${baseUrl}/api/feedback/${order.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ratingOverall, comment }),
+      });
+
+      if (!resp.ok) {
+        setFeedbackMessage('Failed to submit feedback. Please try again.');
+        return;
+      }
+
+      setFeedbackMessage('Thank you for your feedback!');
+    } catch (e) {
+      setFeedbackMessage('Failed to submit feedback. Please try again.');
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
 
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
@@ -237,6 +299,80 @@ const OrderDetail = () => {
           </dl>
         </div>
       </div>
+
+      {/* Feedback & Rating for Delivered Orders */}
+      {order.status?.toLowerCase() === 'delivered' && (
+        <div className="mt-8">
+          <h4 className="text-lg font-medium text-gray-900 mb-2">Rate Your Order</h4>
+          <p className="text-xs text-gray-500 mb-3">
+            Your feedback helps us improve our service and delivery quality.
+          </p>
+          <div className="bg-white shadow rounded-lg p-4">
+            <form onSubmit={handleSubmitFeedback} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Overall Rating</label>
+                <select
+                  className="mt-1 block w-32 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  value={ratingOverall}
+                  onChange={(e) => setRatingOverall(Number(e.target.value))}
+                >
+                  <option value={0}>Select rating</option>
+                  <option value={1}>1 - Very Poor</option>
+                  <option value={2}>2 - Poor</option>
+                  <option value={3}>3 - Average</option>
+                  <option value={4}>4 - Good</option>
+                  <option value={5}>5 - Excellent</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Feedback (optional)</label>
+                <textarea
+                  rows={3}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  placeholder="Share your experience with delivery time, packaging, and overall service"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <button
+                  type="submit"
+                  disabled={feedbackLoading || ratingOverall < 1}
+                  className={`inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white ${
+                    feedbackLoading || ratingOverall < 1
+                      ? 'bg-blue-300 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+                >
+                  {feedbackLoading ? 'Submitting...' : 'Submit Rating'}
+                </button>
+
+                {feedbackMessage && (
+                  <p className="text-sm text-green-600">{feedbackMessage}</p>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Live Tracking (Customer View) */}
+      {order.deliveryPersonId && order.status && !['delivered','cancelled'].includes(order.status.toLowerCase()) && (
+        <div className="mt-8">
+          <h4 className="text-lg font-medium text-gray-900 mb-2">Track Delivery</h4>
+          <p className="text-xs text-gray-500 mb-3">
+            Your order is in delivery. You can see the approximate live location of the delivery partner below.
+          </p>
+          <div className="bg-white shadow rounded-lg p-4">
+            <OrderTrackingMap
+              deliveryPersonId={order.deliveryPersonId}
+              orderId={order.id}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Order Items */}
       <div className="mt-8">

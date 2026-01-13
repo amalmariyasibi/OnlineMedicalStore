@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import PrescriptionUpload from '../components/PrescriptionUpload';
 import PrescriptionList from '../components/PrescriptionList';
-import { getUserPrescriptions, deletePrescription } from '../services/prescriptionService';
+import { getUserPrescriptions, deletePrescription, getSignedUrl } from '../services/prescriptionService';
 
 const Prescriptions = () => {
   const { currentUser } = useAuth();
@@ -12,6 +12,8 @@ const Prescriptions = () => {
   const [selectedPrescription, setSelectedPrescription] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [signedUrl, setSignedUrl] = useState(null);
+  const [loadingSignedUrl, setLoadingSignedUrl] = useState(false);
 
   useEffect(() => {
     const fetchPrescriptions = async () => {
@@ -26,8 +28,10 @@ const Prescriptions = () => {
         const userPrescriptions = await getUserPrescriptions(currentUser.uid);
         setPrescriptions(userPrescriptions);
       } catch (err) {
+        // Keep functionality but avoid showing a harsh banner; rely on empty-state UI instead
         console.error('Error fetching prescriptions:', err);
-        setError('Failed to load prescriptions. Please try again later.');
+        setPrescriptions([]);
+        // Do not set a visible error message here
       } finally {
         setLoading(false);
       }
@@ -41,9 +45,26 @@ const Prescriptions = () => {
     setRefreshTrigger(prev => prev + 1);
   };
 
-  const handleViewPrescription = (prescription) => {
+  const handleViewPrescription = async (prescription) => {
     setSelectedPrescription(prescription);
     setShowModal(true);
+    setSignedUrl(null);
+    setLoadingSignedUrl(true);
+
+    try {
+      console.log('Viewing prescription (User):', prescription);
+      console.log('Using fileUrl:', prescription.fileUrl);
+
+      // Use the stored fileUrl directly
+      setSignedUrl(prescription.fileUrl);
+      // const url = await getSignedUrl(prescription.fileName, prescription.resourceType, prescription.format);
+      // setSignedUrl(url);
+    } catch (err) {
+      console.error('Error getting signed URL:', err);
+      setError('Failed to load prescription file. Please try again.');
+    } finally {
+      setLoadingSignedUrl(false);
+    }
   };
 
   const handleDeletePrescription = async (prescriptionId) => {
@@ -63,6 +84,8 @@ const Prescriptions = () => {
   const closeModal = () => {
     setShowModal(false);
     setSelectedPrescription(null);
+    setSignedUrl(null);
+    setLoadingSignedUrl(false);
   };
 
   if (!currentUser) {
@@ -82,11 +105,9 @@ const Prescriptions = () => {
         <h1 className="text-2xl font-bold">My Prescriptions</h1>
       </div>
 
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700">
-          <p>{error}</p>
-        </div>
-      )}
+      {/* We intentionally avoid showing a strong red error banner for load issues.
+          Any problems are logged to the console, and the "No prescriptions" empty
+          state will be shown instead. */}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1">
@@ -101,8 +122,8 @@ const Prescriptions = () => {
           ) : (
             <>
               <h2 className="text-lg font-semibold mb-4">Your Prescriptions</h2>
-              <PrescriptionList 
-                prescriptions={prescriptions} 
+              <PrescriptionList
+                prescriptions={prescriptions}
                 onDelete={handleDeletePrescription}
                 onView={handleViewPrescription}
               />
@@ -127,51 +148,62 @@ const Prescriptions = () => {
                 </svg>
               </button>
             </div>
-            
+
             <div className="px-6 py-4 max-h-[calc(100vh-10rem)] overflow-y-auto">
-              {selectedPrescription.contentType.includes('image') ? (
-                <img 
-                  src={selectedPrescription.fileUrl} 
-                  alt="Prescription" 
-                  className="w-full h-auto max-h-[70vh] object-contain"
-                />
-              ) : selectedPrescription.contentType.includes('pdf') ? (
-                <div className="aspect-w-16 aspect-h-9">
-                  <iframe 
-                    src={`${selectedPrescription.fileUrl}#toolbar=0`} 
-                    title="Prescription PDF"
-                    className="w-full h-[70vh]"
-                  ></iframe>
+              {loadingSignedUrl ? (
+                <div className="flex justify-center items-center h-64">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
                 </div>
+              ) : signedUrl ? (
+                <>
+                  {selectedPrescription.contentType.includes('image') ? (
+                    <img
+                      src={signedUrl}
+                      alt="Prescription"
+                      className="w-full h-auto max-h-[70vh] object-contain"
+                    />
+                  ) : selectedPrescription.contentType.includes('pdf') ? (
+                    <div className="aspect-w-16 aspect-h-9">
+                      <iframe
+                        src={`${signedUrl}#toolbar=0`}
+                        title="Prescription PDF"
+                        className="w-full h-[70vh]"
+                      ></iframe>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <p>This file type cannot be previewed.</p>
+                      <a
+                        href={signedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
+                      >
+                        Download File
+                      </a>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="text-center py-8">
-                  <p>This file type cannot be previewed.</p>
-                  <a 
-                    href={selectedPrescription.fileUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-                  >
-                    Download File
-                  </a>
+                  <p className="text-red-600">Failed to load prescription file.</p>
                 </div>
               )}
-              
               {selectedPrescription.notes && (
                 <div className="mt-4 p-4 bg-gray-50 rounded-md">
                   <h4 className="text-sm font-medium text-gray-900">Notes:</h4>
                   <p className="mt-1 text-sm text-gray-600">{selectedPrescription.notes}</p>
                 </div>
               )}
-              
+
               <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-gray-500">Status</p>
                   <p className="font-medium">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                      ${selectedPrescription.status === 'approved' ? 'bg-green-100 text-green-800' : 
-                        selectedPrescription.status === 'rejected' ? 'bg-red-100 text-red-800' : 
-                        'bg-yellow-100 text-yellow-800'}`}
+                      ${selectedPrescription.status === 'approved' ? 'bg-green-100 text-green-800' :
+                        selectedPrescription.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'}`}
                     >
                       {selectedPrescription.status.charAt(0).toUpperCase() + selectedPrescription.status.slice(1)}
                     </span>
@@ -180,14 +212,14 @@ const Prescriptions = () => {
                 <div>
                   <p className="text-gray-500">Uploaded On</p>
                   <p className="font-medium">
-                    {selectedPrescription.createdAt ? 
-                      new Date(selectedPrescription.createdAt).toLocaleDateString() : 
+                    {selectedPrescription.createdAt ?
+                      new Date(selectedPrescription.createdAt).toLocaleDateString() :
                       'Unknown date'}
                   </p>
                 </div>
               </div>
             </div>
-            
+
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
               <button
                 type="button"

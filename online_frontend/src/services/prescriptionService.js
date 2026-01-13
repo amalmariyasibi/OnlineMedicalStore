@@ -1,71 +1,50 @@
-import { 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  query, 
-  where, 
-  orderBy, 
-  Timestamp 
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  Timestamp
 } from 'firebase/firestore';
-import { 
-  ref, 
-  uploadBytesResumable, 
-  getDownloadURL, 
-  deleteObject 
-} from 'firebase/storage';
-import { db, storage } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
 
-// Upload a prescription file to Firebase Storage
-export const uploadPrescriptionFile = async (file, userId, onProgress) => {
+// Upload a prescription file via backend (Cloudinary) instead of Firebase Storage
+// onProgress and onTaskCreated are kept in the signature for backward compatibility,
+// but are currently not used with the simple fetch-based implementation.
+export const uploadPrescriptionFile = async (file, userId, onProgress, onTaskCreated) => {
   try {
     if (!file || !userId) {
       throw new Error('File and user ID are required');
     }
 
-    // Create a storage reference
-    const fileExtension = file.name.split('.').pop();
-    const fileName = `${userId}_${Date.now()}.${fileExtension}`;
-    const storageRef = ref(storage, `prescriptions/${fileName}`);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('userId', userId);
 
-    // Upload the file with progress monitoring
-    const uploadTask = uploadBytesResumable(storageRef, file);
-
-    return new Promise((resolve, reject) => {
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          // Calculate and report progress
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          if (onProgress) {
-            onProgress(progress);
-          }
-        },
-        (error) => {
-          // Handle errors
-          console.error('Upload error:', error);
-          reject(error);
-        },
-        async () => {
-          // Upload completed successfully
-          try {
-            // Get the download URL
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve({
-              fileName,
-              fileUrl: downloadURL,
-              contentType: file.type,
-              size: file.size
-            });
-          } catch (error) {
-            reject(error);
-          }
-        }
-      );
+    const response = await fetch('/api/prescriptions/upload', {
+      method: 'POST',
+      body: formData,
     });
+
+    if (!response.ok) {
+      throw new Error('Failed to upload file');
+    }
+
+    const data = await response.json();
+
+    return {
+      fileName: data.fileName,
+      fileUrl: data.fileUrl,
+      contentType: data.contentType || file.type,
+      size: data.size || file.size,
+      resourceType: data.resourceType,
+      format: data.format,
+    };
   } catch (error) {
     console.error('Error in uploadPrescriptionFile:', error);
     throw error;
@@ -86,7 +65,10 @@ export const createPrescription = async (prescriptionData) => {
       fileName: fileInfo.fileName,
       fileUrl: fileInfo.fileUrl,
       contentType: fileInfo.contentType,
+
       size: fileInfo.size,
+      resourceType: fileInfo.resourceType || 'image', // explicit default
+      format: fileInfo.format || null,
       notes: notes || '',
       status, // pending, approved, rejected
       createdAt: Timestamp.now(),
@@ -206,7 +188,7 @@ export const deletePrescription = async (prescriptionId) => {
       throw new Error('Prescription ID is required');
     }
 
-    // Get the prescription data first to get the file name
+    // Get the prescription data first
     const prescriptionRef = doc(db, 'prescriptions', prescriptionId);
     const prescriptionSnap = await getDoc(prescriptionRef);
 
@@ -214,18 +196,9 @@ export const deletePrescription = async (prescriptionId) => {
       throw new Error('Prescription not found');
     }
 
-    const prescriptionData = prescriptionSnap.data();
-
-    // Delete the file from storage if it exists
-    if (prescriptionData.fileName) {
-      const storageRef = ref(storage, `prescriptions/${prescriptionData.fileName}`);
-      try {
-        await deleteObject(storageRef);
-      } catch (storageError) {
-        console.warn('File may not exist in storage:', storageError);
-        // Continue with deletion even if file doesn't exist in storage
-      }
-    }
+    // Note: Files are stored in Cloudinary, not Firebase Storage
+    // Cloudinary cleanup would need to be handled separately if needed
+    // For now, we only delete the Firestore record
 
     // Delete the document from Firestore
     await deleteDoc(prescriptionRef);
@@ -236,39 +209,69 @@ export const deletePrescription = async (prescriptionId) => {
   }
 };
 
+// Get a signed URL for viewing a Cloudinary file
+export const getSignedUrl = async (publicId, resourceType, format) => {
+  try {
+    if (!publicId) {
+      throw new Error('Public ID is required');
+    }
+
+    // Use query parameter instead of path parameter to avoid URL encoding issues
+    let url = `/api/prescriptions/signed-url?publicId=${encodeURIComponent(publicId)}`;
+    if (resourceType) {
+      url += `&resourceType=${resourceType}`;
+    }
+    if (format) {
+      url += `&format=${format}`;
+    }
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error('Failed to get signed URL');
+    }
+
+    const data = await response.json();
+    return data.signedUrl;
+  } catch (error) {
+    console.error('Error in getSignedUrl:', error);
+    throw error;
+  }
+};
+
 // Get all prescriptions (admin only)
 export const getAllPrescriptions = async (filters = {}) => {
   try {
     let prescriptionsQuery = collection(db, 'prescriptions');
-    
+
     // Apply status filter if provided
     if (filters.status) {
       prescriptionsQuery = query(prescriptionsQuery, where('status', '==', filters.status));
     }
-    
+
     // Apply date range filter if provided
     if (filters.startDate && filters.endDate) {
       const startTimestamp = Timestamp.fromDate(new Date(filters.startDate));
       const endTimestamp = Timestamp.fromDate(new Date(filters.endDate));
       prescriptionsQuery = query(
-        prescriptionsQuery, 
+        prescriptionsQuery,
         where('createdAt', '>=', startTimestamp),
         where('createdAt', '<=', endTimestamp)
       );
     }
-    
+
     // Always order by creation date
     prescriptionsQuery = query(prescriptionsQuery, orderBy('createdAt', 'desc'));
-    
+
     const querySnapshot = await getDocs(prescriptionsQuery);
     const prescriptions = [];
-    
+
     querySnapshot.forEach((doc) => {
       const data = doc.data();
       // Convert Firestore Timestamp to JavaScript Date
       const createdAt = data.createdAt?.toDate() || null;
       const updatedAt = data.updatedAt?.toDate() || null;
-      
+
       prescriptions.push({
         id: doc.id,
         ...data,
@@ -276,7 +279,7 @@ export const getAllPrescriptions = async (filters = {}) => {
         updatedAt
       });
     });
-    
+
     return prescriptions;
   } catch (error) {
     console.error('Error in getAllPrescriptions:', error);

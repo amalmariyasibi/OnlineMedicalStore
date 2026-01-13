@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useCart } from "../contexts/CartContextSimple";
 import { createOrder, getUserOrders } from "../firebase";
 import { useAuth } from "../contexts/AuthContext";
+import { analyzeDrugSafety } from "../services/drugInteractionService";
 
 function Checkout() {
   const { items, cartTotal, prescriptionRequired, clearCart } = useCart();
@@ -13,7 +14,7 @@ function Checkout() {
   const checkoutItems = buyNowItem ? [buyNowItem] : items;
   const computedSubtotal = buyNowItem ? (buyNowItem.price * buyNowItem.quantity) : cartTotal;
   const computedPrescriptionRequired = buyNowItem ? (buyNowItem.requiresPrescription || false) : prescriptionRequired;
-  
+
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -26,10 +27,14 @@ function Checkout() {
     paymentMethod: "cod", // cod, card, upi
     upiId: "",
   });
-  
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  
+  const [customerLocation, setCustomerLocation] = useState(null);
+  const [locationStatus, setLocationStatus] = useState("");
+  const [locationLoading, setLocationLoading] = useState(false);
+  const safetyAnalysis = analyzeDrugSafety({ items: checkoutItems });
+
   // Load previous address when component mounts
   useEffect(() => {
     const loadPreviousAddress = async () => {
@@ -57,10 +62,39 @@ function Checkout() {
         }
       }
     };
-    
+
     loadPreviousAddress();
   }, [currentUser]);
-  
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus("Location is not supported in this browser.");
+      return;
+    }
+
+    setLocationLoading(true);
+    setLocationStatus("Detecting your current location...");
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        setCustomerLocation({ lat: latitude, lng: longitude, accuracy, timestamp: new Date().toISOString() });
+        setLocationStatus("Location captured successfully.");
+        setLocationLoading(false);
+      },
+      (err) => {
+        console.error("Geolocation error during checkout:", err);
+        setLocationStatus(err.message || "Unable to get your current location.");
+        setLocationLoading(false);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 20000,
+      }
+    );
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -68,26 +102,31 @@ function Checkout() {
       [name]: value
     }));
   };
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (checkoutItems.length === 0) {
       setError("Your cart is empty");
       return;
     }
-    
+
     // Validate required fields
     if (!formData.firstName || !formData.lastName || !formData.phone || 
         !formData.address || !formData.city || !formData.state || !formData.pincode) {
       setError("Please fill in all required fields");
       return;
     }
-    
+
+    if (safetyAnalysis.hasSevereIssue) {
+      setError("Your order contains medicines with severe interaction or allergy risks. Please review your cart with your doctor or remove the highlighted medicines.");
+      return;
+    }
+
     try {
       setLoading(true);
       setError("");
-      
+
       // Calculate order summary
       const orderSummary = {
         subtotal: cartTotal,
@@ -95,7 +134,7 @@ function Checkout() {
         delivery: cartTotal > 500 ? 0 : 50, // Free delivery above ₹500
         total: cartTotal + (cartTotal * 0.18) + (cartTotal > 500 ? 0 : 50)
       };
-      
+
       // Create order object
       const order = {
         userId: currentUser?.uid || 'guest',
@@ -122,17 +161,18 @@ function Checkout() {
         tax: orderSummary.tax,
         delivery: orderSummary.delivery,
         status: "pending",
+        customerLocation: customerLocation || null,
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      
+
       console.log("Prepared order object:", order);
-      
+
       // Submit order to Firebase
       console.log("Submitting order to Firebase...");
       const result = await createOrder(order);
       console.log("Order creation result:", result);
-      
+
       if (result.success) {
         console.log("Order created successfully with ID:", result.orderId);
         // Redirect to order confirmation without clearing cart
@@ -148,17 +188,17 @@ function Checkout() {
       setLoading(false);
     }
   };
-  
+
   if (checkoutItems.length === 0 && !loading) {
     navigate("/cart");
     return null;
   }
-  
+
   return (
     <div className="bg-gray-50">
       <div className="max-w-7xl mx-auto py-16 px-4 sm:px-6 lg:px-8">
         <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Checkout</h1>
-        
+
         {error && (
           <div className="mt-6 bg-red-50 border-l-4 border-red-400 p-4">
             <div className="flex">
@@ -173,14 +213,14 @@ function Checkout() {
             </div>
           </div>
         )}
-        
+
         <div className="mt-12">
           <div className="lg:grid lg:grid-cols-12 lg:gap-x-12 lg:items-start">
             <div className="lg:col-span-7">
               <form onSubmit={handleSubmit}>
                 <div className="border-t border-gray-200 pt-10">
                   <h2 className="text-lg font-medium text-gray-900">Shipping information</h2>
-                  
+
                   <div className="mt-4 grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-4">
                     <div>
                       <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
@@ -198,7 +238,7 @@ function Checkout() {
                         />
                       </div>
                     </div>
-                    
+
                     <div>
                       <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
                         Last name <span className="text-red-500">*</span>
@@ -215,7 +255,7 @@ function Checkout() {
                         />
                       </div>
                     </div>
-                    
+
                     <div className="sm:col-span-2">
                       <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                         Email address <span className="text-red-500">*</span>
@@ -232,7 +272,7 @@ function Checkout() {
                         />
                       </div>
                     </div>
-                    
+
                     <div className="sm:col-span-2">
                       <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
                         Phone number <span className="text-red-500">*</span>
@@ -249,7 +289,7 @@ function Checkout() {
                         />
                       </div>
                     </div>
-                    
+
                     <div className="sm:col-span-2">
                       <label htmlFor="address" className="block text-sm font-medium text-gray-700">
                         Address <span className="text-red-500">*</span>
@@ -266,7 +306,7 @@ function Checkout() {
                         />
                       </div>
                     </div>
-                    
+
                     <div>
                       <label htmlFor="city" className="block text-sm font-medium text-gray-700">
                         City <span className="text-red-500">*</span>
@@ -283,7 +323,7 @@ function Checkout() {
                         />
                       </div>
                     </div>
-                    
+
                     <div>
                       <label htmlFor="state" className="block text-sm font-medium text-gray-700">
                         State <span className="text-red-500">*</span>
@@ -300,7 +340,7 @@ function Checkout() {
                         />
                       </div>
                     </div>
-                    
+
                     <div>
                       <label htmlFor="pincode" className="block text-sm font-medium text-gray-700">
                         PIN code <span className="text-red-500">*</span>
@@ -318,11 +358,27 @@ function Checkout() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Share live location (optional) */}
+                  <div className="mt-4 sm:col-span-2">
+                    <button
+                      type="button"
+                      onClick={handleUseCurrentLocation}
+                      disabled={locationLoading}
+                      className={`inline-flex items-center px-3 py-2 rounded-md text-xs font-medium border 
+                        ${locationLoading ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-300'}`}
+                    >
+                      {locationLoading ? 'Detecting your current location…' : 'Share my current location for faster delivery'}
+                    </button>
+                    {locationStatus && (
+                      <p className="mt-1 text-xs text-gray-500">{locationStatus}</p>
+                    )}
+                  </div>
                 </div>
-                
+
                 <div className="mt-10 border-t border-gray-200 pt-10">
                   <h2 className="text-lg font-medium text-gray-900">Payment method</h2>
-                  
+
                   <div className="mt-4 space-y-4">
                     <div className="flex items-center">
                       <input
@@ -338,7 +394,7 @@ function Checkout() {
                         Cash on Delivery
                       </label>
                     </div>
-                    
+
                     <div className="flex items-center">
                       <input
                         id="card"
@@ -353,7 +409,7 @@ function Checkout() {
                         Credit/Debit Card
                       </label>
                     </div>
-                    
+
                     <div className="flex items-center">
                       <input
                         id="upi"
@@ -369,7 +425,7 @@ function Checkout() {
                       </label>
                     </div>
                   </div>
-                  
+
                   {formData.paymentMethod === "upi" && (
                     <div className="mt-2">
                       <input
@@ -382,7 +438,7 @@ function Checkout() {
                       />
                     </div>
                   )}
-                  
+
                   {formData.paymentMethod !== "cod" && (
                     <div className="mt-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
                       <div className="flex">
@@ -400,7 +456,7 @@ function Checkout() {
                     </div>
                   )}
                 </div>
-                
+
                 <div className="mt-10 pt-6 border-t border-gray-200">
                   <button
                     type="submit"
@@ -412,11 +468,11 @@ function Checkout() {
                 </div>
               </form>
             </div>
-            
+
             <div className="mt-16 lg:mt-0 lg:col-span-5">
               <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-6 sm:p-6 lg:p-8">
                 <h2 className="text-lg font-medium text-gray-900">Order Summary</h2>
-                
+
                 <div className="mt-6 flow-root">
                   <ul className="-my-4 divide-y divide-gray-200">
                     {checkoutItems.map((item) => (
@@ -444,18 +500,18 @@ function Checkout() {
                     ))}
                   </ul>
                 </div>
-                
+
                 <div className="mt-6 space-y-4">
                   <div className="flex justify-between text-sm">
                     <p className="text-gray-500">Subtotal</p>
                     <p>₹{computedSubtotal.toFixed(2)}</p>
                   </div>
-                  
+
                   <div className="flex justify-between text-sm">
                     <p className="text-gray-500">Tax (18%)</p>
                     <p>₹{(computedSubtotal * 0.18).toFixed(2)}</p>
                   </div>
-                  
+
                   <div className="flex justify-between text-sm">
                     <p className="text-gray-500">Delivery</p>
                     <p>
@@ -466,13 +522,45 @@ function Checkout() {
                       )}
                     </p>
                   </div>
-                  
+
                   <div className="mt-6 flex justify-between text-base font-medium text-gray-900">
                     <p>Total</p>
                     <p>₹{(computedSubtotal + (computedSubtotal * 0.18) + (computedSubtotal > 500 ? 0 : 50)).toFixed(2)}</p>
                   </div>
                 </div>
-                
+
+                {checkoutItems.length > 0 && (safetyAnalysis.interactions.length > 0 || safetyAnalysis.allergyWarnings.length > 0) && (
+                  <div className="mt-6 bg-red-50 border-l-4 border-red-400 p-4 rounded-md">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.257 7.099c.765-1.36 2.722-1.36 3.486 0l2.829 4.971C15.31 13.431 14.523 15 13.242 15H6.758c-1.281 0-2.068-1.569-1.33-2.93l2.829-4.971zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-5a1 1 0 00-.894.553l-1.5 3A1 1 0 009.5 13h1a1 1 0 00.894-1.447l-1.5-3A1 1 0 0010 8z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm font-semibold text-red-800">
+                          Drug Interaction & Allergy Warnings
+                        </p>
+                        <ul className="mt-2 text-xs text-red-700 list-disc list-inside space-y-1">
+                          {safetyAnalysis.interactions.map((issue, idx) => (
+                            <li key={`interaction-${idx}`}>
+                              {issue.message}
+                            </li>
+                          ))}
+                          {safetyAnalysis.allergyWarnings.map((issue, idx) => (
+                            <li key={`allergy-${idx}`}>
+                              {issue.message}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-[11px] text-red-600">
+                          This information is for safety assistance only and does not replace advice from your doctor or pharmacist.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {computedPrescriptionRequired && (
                   <div className="mt-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
                     <div className="flex">

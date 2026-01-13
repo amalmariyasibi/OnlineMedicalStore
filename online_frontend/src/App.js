@@ -25,12 +25,14 @@ import Cart from "./pages/CartEnhanced";
 import Checkout from "./pages/CheckoutEnhanced";
 import OrderConfirmation from "./pages/OrderConfirmation";
 import Prescriptions from "./pages/Prescriptions";
-import Orders from "./pages/Orders";
+import Orders from './pages/Orders';
+import HealthProfile from './pages/HealthProfile';
 import OrderDetail from "./pages/OrderDetail";
 import UserDashboard from "./pages/user/Dashboard";
 import Notifications from "./pages/Notifications";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
+import DiseaseMedicineFinder from "./pages/DiseaseMedicineFinder";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { CartProvider } from "./contexts/CartContextSimple";
 import CartIcon from "./components/CartIcon";
@@ -76,6 +78,16 @@ const Navigation = ({ user, onLogout }) => {
                 } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
               >
                 Products
+              </Link>
+              <Link 
+                to="/find-medicine" 
+                className={`${
+                  location.pathname === "/find-medicine"
+                    ? "border-blue-500 text-blue-700"
+                    : "border-transparent text-gray-500 hover:border-blue-500 hover:text-blue-700"
+                } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
+              >
+                Find Medicine
               </Link>
               <Link to="/about" className={`${
                 location.pathname === "/about"
@@ -199,6 +211,13 @@ const Navigation = ({ user, onLogout }) => {
               : "border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
           } block pl-3 pr-4 py-2 border-l-4 text-base font-medium`}>
             Products
+          </Link>
+          <Link to="/find-medicine" className={`${
+            location.pathname === "/find-medicine"
+              ? "bg-blue-50 border-blue-500 text-blue-700"
+              : "border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
+          } block pl-3 pr-4 py-2 border-l-4 text-base font-medium`}>
+            Find Medicine
           </Link>
           <Link to="/about" className={`${
             location.pathname === "/about"
@@ -378,6 +397,16 @@ function App() {
             <Route path="/orders/:orderId" element={
               <ProtectedRoute>
                 <OrderDetail />
+              </ProtectedRoute>
+            } />
+            <Route path="/health-profile" element={
+              <ProtectedRoute>
+                <HealthProfile />
+              </ProtectedRoute>
+            } />
+            <Route path="/find-medicine" element={
+              <ProtectedRoute>
+                <DiseaseMedicineFinder />
               </ProtectedRoute>
             } />
             {/* <Route path="/payment-test" element={

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { createOrder } from "../firebase";
+import { createOrder, getUserOrders } from "../firebase";
+import { analyzeDrugSafety } from "../services/drugInteractionService";
 
 // Load Razorpay script
 const loadRazorpayScript = () => {
@@ -22,7 +23,7 @@ const loadRazorpayScript = () => {
       console.log('Razorpay script loaded successfully');
       resolve(true);
     };
-    
+
     script.onerror = (error) => {
       console.error('Error loading Razorpay script:', error);
       reject(new Error('Failed to load Razorpay script'));
@@ -54,9 +55,51 @@ function Checkout() {
     landmark: '',
     alternatePhone: ''
   });
+  const [customerLocation, setCustomerLocation] = useState(null);
+  const [locationStatus, setLocationStatus] = useState('');
+  const [locationLoading, setLocationLoading] = useState(false);
   
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [addressErrors, setAddressErrors] = useState({});
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus('Location is not supported in this browser.');
+      return;
+    }
+
+    setLocationLoading(true);
+    setLocationStatus('Detecting your current location...');
+
+    // Failsafe timeout so UI doesn't stay stuck forever
+    const timeoutId = setTimeout(() => {
+      if (locationLoading) {
+        setLocationLoading(false);
+        setLocationStatus('Unable to get location. Please ensure browser permission is allowed and try again.');
+      }
+    }, 20000);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        setCustomerLocation({ lat: latitude, lng: longitude, accuracy, timestamp: new Date().toISOString() });
+        setLocationStatus('Location captured successfully.');
+        clearTimeout(timeoutId);
+        setLocationLoading(false);
+      },
+      (err) => {
+        console.error('Geolocation error during checkout:', err);
+        setLocationStatus(err.message || 'Unable to get your current location.');
+        clearTimeout(timeoutId);
+        setLocationLoading(false);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 20000,
+      }
+    );
+  };
 
   const validateDeliveryAddress = (addr) => {
     const errors = {};
@@ -101,11 +144,17 @@ function Checkout() {
 
   const cartTotal = cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
   const itemCount = cartItems.reduce((count, item) => count + item.quantity, 0);
+  const safetyAnalysis = analyzeDrugSafety({ items: cartItems });
 
   const handlePlaceOrder = async () => {
     if (!currentUser) {
       alert('Please login to place order');
       navigate('/login');
+      return;
+    }
+
+    if (safetyAnalysis.hasSevereIssue) {
+      alert('Your order contains medicines with severe interaction or allergy risks. Please review your cart with your doctor or remove the highlighted medicines.');
       return;
     }
 
@@ -156,6 +205,7 @@ function Checkout() {
         items: cartItems,
         totalAmount: cartTotal,
         deliveryAddress,
+        customerLocation: customerLocation || null,
         paymentMethod: 'cod',
         paymentStatus: 'pending',
         status: 'pending'
@@ -164,6 +214,14 @@ function Checkout() {
       const result = await createOrder(orderData);
       
       if (result.success) {
+        // Persist this address locally for faster future checkouts
+        try {
+          if (currentUser?.uid) {
+            localStorage.setItem(`lastAddress_${currentUser.uid}`, JSON.stringify(deliveryAddress));
+          }
+        } catch (e) {
+          console.warn('Unable to save lastAddress to localStorage:', e);
+        }
         clearCartAndNavigate(result.orderId);
       } else {
         alert('Failed to place order: ' + result.error);
@@ -424,6 +482,7 @@ function Checkout() {
           items: cartItems,
           totalAmount: cartTotal,
           deliveryAddress,
+          customerLocation: customerLocation || null,
           paymentMethod: 'online',
           paymentStatus: 'completed',
           paymentDetails: {
@@ -449,6 +508,14 @@ function Checkout() {
         const result = await createOrder(orderData);
         
         if (result.success) {
+          // Persist this address locally for faster future checkouts
+          try {
+            if (currentUser?.uid) {
+              localStorage.setItem(`lastAddress_${currentUser.uid}`, JSON.stringify(deliveryAddress));
+            }
+          } catch (e) {
+            console.warn('Unable to save lastAddress to localStorage:', e);
+          }
           console.log('Order created successfully:', result.orderId);
           clearCartAndNavigate(result.orderId);
         } else {
@@ -642,6 +709,22 @@ function Checkout() {
                       {addressErrors.state && <p className="mt-1 text-xs text-red-600">{addressErrors.state}</p>}
                     </div>
                   </div>
+
+                  {/* Share live location (optional) */}
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={handleUseCurrentLocation}
+                      disabled={locationLoading}
+                      className={`inline-flex items-center px-3 py-2 rounded-md text-xs font-medium border 
+                        ${locationLoading ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-300'}`}
+                    >
+                      {locationLoading ? 'Detecting your current location…' : 'Share my current location for faster delivery'}
+                    </button>
+                    {locationStatus && (
+                      <p className="mt-1 text-xs text-gray-500">{locationStatus}</p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -747,6 +830,38 @@ function Checkout() {
                 <div className="text-sm text-green-600 font-medium">
                   You will save ₹0 on this order
                 </div>
+
+                {cartItems.length > 0 && (safetyAnalysis.interactions.length > 0 || safetyAnalysis.allergyWarnings.length > 0) && (
+                  <div className="mt-4 bg-red-50 border-l-4 border-red-400 p-4 rounded-md">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.257 7.099c.765-1.36 2.722-1.36 3.486 0l2.829 4.971C15.31 13.431 14.523 15 13.242 15H6.758c-1.281 0-2.068-1.569-1.33-2.93l2.829-4.971zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-5a1 1 0 00-.894.553l-1.5 3A1 1 0 009.5 13h1a1 1 0 00.894-1.447l-1.5-3A1 1 0 0010 8z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm font-semibold text-red-800">
+                          Drug Interaction & Allergy Warnings
+                        </p>
+                        <ul className="mt-2 text-xs text-red-700 list-disc list-inside space-y-1">
+                          {safetyAnalysis.interactions.map((issue, idx) => (
+                            <li key={`interaction-${idx}`}>
+                              {issue.message}
+                            </li>
+                          ))}
+                          {safetyAnalysis.allergyWarnings.map((issue, idx) => (
+                            <li key={`allergy-${idx}`}>
+                              {issue.message}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-[11px] text-red-600">
+                          This information is for safety assistance only and does not replace advice from your doctor or pharmacist.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="px-6 pb-6">
