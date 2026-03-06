@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser, getUserData, getDeliveryOrders, updateOrderStatus, requestAndSaveFcmToken, onForegroundNotification } from "../firebase";
-import DeliveryMapPanel from "../components/DeliveryMapPanel";
+import LiveTrackingMap from "../components/LiveTrackingMap";
 
 function DeliveryDashboard() {
   const navigate = useNavigate();
@@ -691,7 +691,7 @@ function DeliveryDashboard() {
       </div>
       
       {mapOrder && user && (
-        <DeliveryMapPanel
+        <LiveTrackingMap
           deliveryPersonId={user.uid}
           orderId={mapOrder.id}
           customerLocation={mapOrder.customerLocation || null}

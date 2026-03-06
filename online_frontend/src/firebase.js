@@ -2220,7 +2220,7 @@ export const resetSystemSettings = async () => {
 // ===== Real-time Delivery Location Helpers =====
 
 // Update or create the current location for a delivery person
-export const updateDeliveryLocation = async (deliveryPersonId, { lat, lng, activeOrderId = null }) => {
+export const updateDeliveryLocation = async (deliveryPersonId, { lat, lng, activeOrderId = null, accuracy = null, timestamp = null }) => {
   try {
     if (!deliveryPersonId || typeof lat !== "number" || typeof lng !== "number") {
       return { success: false, error: "Invalid delivery location payload" };
@@ -2230,13 +2230,36 @@ export const updateDeliveryLocation = async (deliveryPersonId, { lat, lng, activ
     await setDoc(locRef, {
       lat,
       lng,
+      accuracy,
       activeOrderId: activeOrderId || null,
+      timestamp: timestamp || new Date().toISOString(),
       updatedAt: new Date()
     }, { merge: true });
 
     return { success: true };
   } catch (error) {
     console.error("updateDeliveryLocation error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Get delivery person's current location
+export const getDeliveryLocation = async (deliveryPersonId) => {
+  try {
+    if (!deliveryPersonId) {
+      return { success: false, error: "Delivery person ID is required" };
+    }
+
+    const locRef = doc(db, "deliveryLocations", deliveryPersonId);
+    const locSnap = await getDoc(locRef);
+
+    if (!locSnap.exists()) {
+      return { success: true, location: null };
+    }
+
+    return { success: true, location: { id: locSnap.id, ...locSnap.data() } };
+  } catch (error) {
+    console.error("getDeliveryLocation error:", error);
     return { success: false, error: error.message };
   }
 };

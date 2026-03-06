@@ -66,7 +66,12 @@ const PrescriptionUpload = ({ onUploadComplete, buttonText = "Upload Prescriptio
       setSuccess('');
       setUploadProgress(0);
 
+      console.log('=== PRESCRIPTION UPLOAD DEBUG ===');
+      console.log('User ID:', currentUser.uid);
+      console.log('File:', file.name, file.type, file.size);
+
       // Upload file to Firebase Storage
+      console.log('Step 1: Uploading file to Cloudinary...');
       const fileInfo = await uploadPrescriptionFile(
         file,
         currentUser.uid,
@@ -76,7 +81,7 @@ const PrescriptionUpload = ({ onUploadComplete, buttonText = "Upload Prescriptio
         }
       );
 
-      console.log('File uploaded to backend. Info:', fileInfo);
+      console.log('✅ File uploaded to backend. Info:', fileInfo);
 
       // Create prescription record in Firestore
       const prescriptionData = {
@@ -85,11 +90,13 @@ const PrescriptionUpload = ({ onUploadComplete, buttonText = "Upload Prescriptio
         notes
       };
 
-      console.log('Creating prescription in Firestore with data:', prescriptionData);
+      console.log('Step 2: Creating prescription in Firestore with data:', prescriptionData);
 
       const prescription = await createPrescription(prescriptionData);
 
-      console.log('Prescription created successfully:', prescription);
+      console.log('✅ Prescription created successfully:', prescription);
+      console.log('Prescription ID:', prescription.id);
+      console.log('💡 Admin should now be able to see this prescription in the dashboard');
 
       setSuccess('Prescription uploaded successfully!');
       setFile(null);
@@ -105,7 +112,12 @@ const PrescriptionUpload = ({ onUploadComplete, buttonText = "Upload Prescriptio
         onUploadComplete(prescription);
       }
     } catch (err) {
-      console.error('Upload flow error:', err);
+      console.error('❌ Upload flow error:', err);
+      console.error('Error details:', {
+        message: err.message,
+        code: err.code,
+        stack: err.stack
+      });
       setError(err.message || 'An error occurred during upload');
     } finally {
       setIsUploading(false);

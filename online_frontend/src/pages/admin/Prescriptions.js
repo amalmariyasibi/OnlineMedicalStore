@@ -17,10 +17,25 @@ const AdminPrescriptions = () => {
 
   useEffect(() => {
     const fetchPrescriptions = async () => {
-      if (!currentUser || currentUser.role !== 'admin') {
+      console.log('=== ADMIN PRESCRIPTIONS DEBUG ===');
+      console.log('Current User:', currentUser);
+      console.log('User Role:', currentUser?.role);
+      console.log('Is Admin?:', currentUser?.role === 'admin');
+      
+      if (!currentUser) {
+        console.log('❌ No current user - user not logged in');
         setLoading(false);
         return;
       }
+      
+      if (currentUser.role !== 'admin') {
+        console.log('❌ User role is not admin. Current role:', currentUser.role);
+        console.log('💡 TIP: Check Firestore users collection and ensure role field is set to "admin"');
+        setLoading(false);
+        return;
+      }
+
+      console.log('✅ User is admin, fetching prescriptions...');
 
       try {
         setLoading(true);
@@ -32,10 +47,43 @@ const AdminPrescriptions = () => {
           filters.status = statusFilter;
         }
 
+        console.log('Fetching with filters:', filters);
         const allPrescriptions = await getAllPrescriptions(filters);
-        setPrescriptions(allPrescriptions);
+        console.log('✅ Prescriptions fetched successfully:', allPrescriptions.length, 'prescriptions');
+        console.log('Prescription data:', allPrescriptions);
+        
+        // Validate and filter prescriptions
+        const validPrescriptions = allPrescriptions.filter((prescription, index) => {
+          // Check if prescription has required fields
+          if (!prescription.id) {
+            console.warn(`⚠️ Prescription at index ${index} missing ID, skipping`);
+            return false;
+          }
+          if (!prescription.userId) {
+            console.warn(`⚠️ Prescription ${prescription.id} missing userId, skipping`);
+            return false;
+          }
+          if (!prescription.fileUrl) {
+            console.warn(`⚠️ Prescription ${prescription.id} missing fileUrl, skipping`);
+            return false;
+          }
+          return true;
+        });
+        
+        console.log(`✅ Valid prescriptions: ${validPrescriptions.length} out of ${allPrescriptions.length}`);
+        
+        if (validPrescriptions.length < allPrescriptions.length) {
+          console.warn(`⚠️ ${allPrescriptions.length - validPrescriptions.length} prescriptions were invalid and skipped`);
+        }
+        
+        setPrescriptions(validPrescriptions);
       } catch (err) {
-        console.error('Error fetching prescriptions:', err);
+        console.error('❌ Error fetching prescriptions:', err);
+        console.error('Error details:', {
+          message: err.message,
+          code: err.code,
+          stack: err.stack
+        });
         setError('Failed to load prescriptions. Please try again later.');
       } finally {
         setLoading(false);
@@ -56,20 +104,44 @@ const AdminPrescriptions = () => {
     setLoadingSignedUrl(true);
 
     try {
-      console.log('Viewing prescription:', prescription);
-      console.log('Using fileUrl:', prescription.fileUrl);
+      console.log('=== VIEWING PRESCRIPTION ===');
+      console.log('Prescription data:', prescription);
+      console.log('File URL:', prescription.fileUrl);
+      console.log('File name:', prescription.fileName);
+      console.log('Resource type:', prescription.resourceType);
+      console.log('Format:', prescription.format);
 
       if (!prescription.fileUrl) {
+        console.error('❌ No fileUrl found in prescription');
         setError('No file URL found for this prescription.');
-        // return; // Don't return, let it try logic below just in case, or show error
+        setLoadingSignedUrl(false);
+        return;
       }
 
-      // Use the stored fileUrl directly
+      // Use the stored fileUrl directly (Cloudinary URLs are public by default)
+      console.log('✅ Using direct Cloudinary URL:', prescription.fileUrl);
       setSignedUrl(prescription.fileUrl);
-      // const url = await getSignedUrl(prescription.fileName, prescription.resourceType, prescription.format);
-      // setSignedUrl(url);
+      
+      // Test if the URL is accessible
+      console.log('Testing URL accessibility...');
+      const testResponse = await fetch(prescription.fileUrl, { method: 'HEAD' });
+      console.log('URL test response status:', testResponse.status);
+      
+      if (!testResponse.ok) {
+        console.error('❌ URL is not accessible. Status:', testResponse.status);
+        console.error('💡 TIP: Check Cloudinary configuration and file upload');
+        setError(`Failed to load prescription file (Status: ${testResponse.status}). The file may have been deleted or Cloudinary settings may need adjustment.`);
+      } else {
+        console.log('✅ URL is accessible');
+      }
+      
     } catch (err) {
-      console.error('Error getting signed URL:', err);
+      console.error('❌ Error viewing prescription:', err);
+      console.error('Error details:', {
+        message: err.message,
+        name: err.name,
+        stack: err.stack
+      });
       setError('Failed to load prescription file. Please try again.');
     } finally {
       setLoadingSignedUrl(false);

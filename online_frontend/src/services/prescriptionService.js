@@ -54,6 +54,9 @@ export const uploadPrescriptionFile = async (file, userId, onProgress, onTaskCre
 // Create a new prescription record in Firestore
 export const createPrescription = async (prescriptionData) => {
   try {
+    console.log('=== createPrescription called ===');
+    console.log('Input data:', prescriptionData);
+    
     const { userId, fileInfo, notes, status = 'pending' } = prescriptionData;
 
     if (!userId || !fileInfo) {
@@ -75,13 +78,27 @@ export const createPrescription = async (prescriptionData) => {
       updatedAt: Timestamp.now()
     };
 
+    console.log('Creating Firestore document with:', prescriptionRecord);
     const docRef = await addDoc(collection(db, 'prescriptions'), prescriptionRecord);
-    return {
+    console.log('✅ Document created with ID:', docRef.id);
+    
+    const result = {
       id: docRef.id,
       ...prescriptionRecord
     };
+    
+    console.log('Returning prescription:', result);
+    return result;
   } catch (error) {
-    console.error('Error in createPrescription:', error);
+    console.error('❌ Error in createPrescription:', error);
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
+    
+    if (error.code === 'permission-denied') {
+      console.error('🔒 PERMISSION DENIED: Check Firestore security rules');
+      console.error('💡 TIP: Ensure users can create prescriptions with their own userId');
+    }
+    
     throw error;
   }
 };
@@ -239,35 +256,26 @@ export const getSignedUrl = async (publicId, resourceType, format) => {
   }
 };
 
-// Get all prescriptions (admin only)
+// Get all prescriptions (admin only) - SIMPLIFIED VERSION
 export const getAllPrescriptions = async (filters = {}) => {
   try {
-    let prescriptionsQuery = collection(db, 'prescriptions');
-
-    // Apply status filter if provided
-    if (filters.status) {
-      prescriptionsQuery = query(prescriptionsQuery, where('status', '==', filters.status));
-    }
-
-    // Apply date range filter if provided
-    if (filters.startDate && filters.endDate) {
-      const startTimestamp = Timestamp.fromDate(new Date(filters.startDate));
-      const endTimestamp = Timestamp.fromDate(new Date(filters.endDate));
-      prescriptionsQuery = query(
-        prescriptionsQuery,
-        where('createdAt', '>=', startTimestamp),
-        where('createdAt', '<=', endTimestamp)
-      );
-    }
-
-    // Always order by creation date
-    prescriptionsQuery = query(prescriptionsQuery, orderBy('createdAt', 'desc'));
-
-    const querySnapshot = await getDocs(prescriptionsQuery);
+    console.log('🔍 getAllPrescriptions - Fetching all prescriptions...');
+    console.log('Filters received:', filters);
+    
+    // Simple query without orderBy to avoid Firestore index requirement
+    const prescriptionsRef = collection(db, 'prescriptions');
+    
+    console.log('Executing Firestore getDocs...');
+    const querySnapshot = await getDocs(prescriptionsRef);
+    
+    console.log('📊 Query complete. Total documents found:', querySnapshot.size);
+    
     const prescriptions = [];
-
+    
     querySnapshot.forEach((doc) => {
       const data = doc.data();
+      console.log('Document ID:', doc.id);
+      
       // Convert Firestore Timestamp to JavaScript Date
       const createdAt = data.createdAt?.toDate() || null;
       const updatedAt = data.updatedAt?.toDate() || null;
@@ -279,10 +287,48 @@ export const getAllPrescriptions = async (filters = {}) => {
         updatedAt
       });
     });
-
-    return prescriptions;
+    
+    console.log('Total prescriptions before filtering:', prescriptions.length);
+    
+    // Apply filters in memory (no Firestore index needed)
+    let filtered = prescriptions;
+    
+    if (filters.status) {
+      console.log('Applying status filter:', filters.status);
+      filtered = filtered.filter(p => p.status === filters.status);
+      console.log('After status filter:', filtered.length);
+    }
+    
+    if (filters.startDate && filters.endDate) {
+      console.log('Applying date range filter');
+      const start = new Date(filters.startDate);
+      const end = new Date(filters.endDate);
+      filtered = filtered.filter(p => {
+        if (!p.createdAt) return false;
+        return p.createdAt >= start && p.createdAt <= end;
+      });
+      console.log('After date filter:', filtered.length);
+    }
+    
+    // Sort by creation date (newest first)
+    filtered.sort((a, b) => {
+      if (!a.createdAt) return 1;
+      if (!b.createdAt) return -1;
+      return b.createdAt - a.createdAt;
+    });
+    
+    console.log('✅ Returning', filtered.length, 'prescriptions');
+    return filtered;
+    
   } catch (error) {
-    console.error('Error in getAllPrescriptions:', error);
+    console.error('❌ Error in getAllPrescriptions:', error);
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
+    
+    if (error.code === 'permission-denied') {
+      console.error('🔒 PERMISSION DENIED - Check Firestore security rules');
+    }
+    
     throw error;
   }
 };
