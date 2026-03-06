@@ -1,22 +1,22 @@
 # AI Health Chatbot - User Journey Guide
 
-## 🗺️ Complete User Journey Map
+## 🎯 Complete User Experience Flow
 
-### Journey 1: First-Time User with Symptoms
+This guide shows exactly what users will see and experience when using the AI Health Chatbot.
 
+---
+
+## Journey 1: Finding Medicine for Symptoms
+
+### Step 1: Opening the Chatbot
+**User sees three ways to access:**
+1. Click "AI Health Assistant" in navigation menu
+2. Click the card on user dashboard
+3. Click floating blue button (bottom-right corner)
+
+### Step 2: Welcome Screen
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ STEP 1: User Login                                              │
-│ User logs into Medihaven account                                │
-└─────────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ STEP 2: Discover Chatbot                                        │
-│ User sees three ways to access:                                 │
-│ • Navigation menu: "AI Health Assistant"                        │
-│ • Dashboard card: "AI Health Assistant"                         │
-│ • Floating button: Blue chat icon (bottom-right)                │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │ STEP 3: Open Chatbot                                            │

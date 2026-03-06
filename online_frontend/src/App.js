@@ -35,6 +35,7 @@ import Contact from "./pages/Contact";
 import DiseaseMedicineFinder from "./pages/DiseaseMedicineFinder";
 import HealthChatbot from "./pages/HealthChatbot";
 import PrescriptionScannerPage from "./pages/PrescriptionScannerPage";
+import MedicineScanner from "./pages/MedicineScanner";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { CartProvider } from "./contexts/CartContextSimple";
 import CartIcon from "./components/CartIcon";
@@ -440,6 +441,11 @@ function App() {
             <Route path="/health-assistant" element={
               <ProtectedRoute>
                 <HealthChatbot />
+              </ProtectedRoute>
+            } />
+            <Route path="/medicine-scanner" element={
+              <ProtectedRoute>
+                <MedicineScanner />
               </ProtectedRoute>
             } />
             {/* <Route path="/payment-test" element={

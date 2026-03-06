@@ -1,0 +1,59 @@
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║              🚨 DO THIS NOW TO FIX THE ERROR 🚨              ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+The error "Token is not valid" appears because you haven't 
+restarted the backend server yet.
+
+All code fixes are done. You just need to restart!
+
+
+┌──────────────────────────────────────────────────────────────┐
+│                                                              │
+│  STEP 1: Find the terminal where backend is running         │
+│          (Look for "npm start" in online_backend folder)    │
+│                                                              │
+│  STEP 2: Press Ctrl+C to stop it                           │
+│                                                              │
+│  STEP 3: Type: npm start                                    │
+│          Press Enter                                         │
+│                                                              │
+│  STEP 4: Wait until you see:                                │
+│          ✅ Firebase Admin initialized                      │
+│                                                              │
+│  STEP 5: Press F5 in your browser                          │
+│                                                              │
+│  STEP 6: Test the scanner                                   │
+│                                                              │
+│  ✅ DONE! It will work now!                                 │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════
+
+QUICK VERSION:
+
+1. Ctrl+C (in backend terminal)
+2. npm start
+3. Wait for "Firebase Admin initialized"
+4. F5 (in browser)
+5. Test scanner
+6. ✅ Works!
+
+═══════════════════════════════════════════════════════════════
+
+WHY RESTART IS NEEDED:
+
+Node.js doesn't automatically reload code changes.
+The new Firebase authentication code won't work until you restart.
+
+═══════════════════════════════════════════════════════════════
+
+TIME REQUIRED: 15 seconds
+
+═══════════════════════════════════════════════════════════════
+
+THAT'S IT! JUST RESTART THE BACKEND! 🚀

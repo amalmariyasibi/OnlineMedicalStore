@@ -17,6 +17,7 @@ const mlRoutes = require("./routes/mlRoutes");
 const feedbackRoutes = require("./routes/feedbackRoutes");
 const prescriptionRoutes = require("./routes/prescriptionRoutes");
 const chatbotRoutes = require("./routes/chatbot");
+const medicineScannerRoutes = require("./routes/medicineScanner");
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.use("/api/ml", mlRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/prescriptions", prescriptionRoutes);
 app.use("/api/chatbot", chatbotRoutes);
+app.use("/api/medicine-scanner", medicineScannerRoutes);
 
 // Add a catch-all route for debugging (using proper Express syntax)
 app.use((req, res) => {

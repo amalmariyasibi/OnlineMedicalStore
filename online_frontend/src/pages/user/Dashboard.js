@@ -199,6 +199,76 @@ const UserDashboard = () => {
         </Link>
       </div>
       
+      {/* AI Scanner Section */}
+      <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg shadow-lg p-8 mb-6">
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Specialized AI Features</h2>
+          <div className="w-16 h-1 bg-blue-600 mx-auto mb-3"></div>
+          <p className="text-gray-600">
+            Innovative healthcare tools designed to make life easier for you and your family.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* AI Strip Scanner Card */}
+          <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-xl transition-shadow">
+            <div className="flex items-start mb-4">
+              <div className="bg-blue-100 rounded-full p-3 mr-4">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center mb-2">
+                  <h3 className="text-lg font-bold text-gray-900 mr-2">AI Strip Scanner</h3>
+                  <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded">
+                    NEW
+                  </span>
+                  <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5 rounded ml-1">
+                    ELDERLY FRIENDLY
+                  </span>
+                </div>
+                <p className="text-gray-600 text-sm mb-4">
+                  Upload a photo of your medicine strip. Our AI identifies it and adds to your cart automatically.
+                </p>
+                <Link
+                  to="/medicine-scanner"
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Start AI Scanning →
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* Rx Expert Scanner Card */}
+          <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-xl transition-shadow">
+            <div className="flex items-start">
+              <div className="bg-purple-100 rounded-full p-3 mr-4">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Rx Expert Scanner</h3>
+                <p className="text-gray-600 text-sm mb-4">
+                  Advanced OCR for doctor's handwritten prescriptions. Extracts dosage, strength, and matching medicines.
+                </p>
+                <Link
+                  to="/prescription-scanner"
+                  className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                >
+                  Scan Prescription →
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       {/* Recent Orders */}
       <div className="bg-white shadow rounded-lg p-6">
         <div className="flex justify-between items-center mb-4">
