@@ -1675,10 +1675,39 @@ export const createOrder = async (orderData) => {
 
     // Generate OTP for delivery confirmation
     const deliveryOtp = generateOTP(6);
+    
+    // Extract customer name and address for easy access
+    let userName = 'Customer';
+    let address = 'No address provided';
+    
+    if (orderData.shippingAddress || orderData.deliveryAddress) {
+      const addr = orderData.shippingAddress || orderData.deliveryAddress;
+      
+      // Extract customer name
+      if (addr.firstName && addr.lastName) {
+        userName = `${addr.firstName} ${addr.lastName}`;
+      } else if (addr.firstName) {
+        userName = addr.firstName;
+      } else if (addr.name) {
+        userName = addr.name;
+      }
+      
+      // Extract full address
+      const parts = [];
+      if (addr.address) parts.push(addr.address);
+      if (addr.city) parts.push(addr.city);
+      if (addr.state) parts.push(addr.state);
+      if (addr.pincode) parts.push(addr.pincode);
+      if (parts.length > 0) {
+        address = parts.join(', ');
+      }
+    }
 
     // Add timestamps, OTP, and metadata
     const orderWithTimestamps = {
       ...orderData,
+      userName,
+      address,
       requiresPrescription,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -1879,14 +1908,58 @@ export const getDeliveryOrders = async (deliveryPersonId) => {
       
       querySnapshot.forEach((doc) => {
         const data = doc.data();
+        
+        // Extract customer name from various possible locations
+        let customerName = data.userName || 'Customer';
+        if (!data.userName) {
+          // Try to get from shippingAddress or deliveryAddress
+          const addr = data.shippingAddress || data.deliveryAddress;
+          if (addr) {
+            if (addr.firstName && addr.lastName) {
+              customerName = `${addr.firstName} ${addr.lastName}`;
+            } else if (addr.firstName) {
+              customerName = addr.firstName;
+            } else if (addr.name) {
+              customerName = addr.name;
+            }
+          }
+        }
+        
+        // Extract address from various possible locations
+        let fullAddress = data.address || 'No address provided';
+        if (!data.address) {
+          const addr = data.shippingAddress || data.deliveryAddress;
+          if (addr) {
+            const parts = [];
+            if (addr.address) parts.push(addr.address);
+            if (addr.city) parts.push(addr.city);
+            if (addr.state) parts.push(addr.state);
+            if (addr.pincode) parts.push(addr.pincode);
+            if (parts.length > 0) {
+              fullAddress = parts.join(', ');
+            }
+          }
+        }
+        
+        // Extract product names from items
+        let productNames = 'No items';
+        if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+          productNames = data.items.map(item => item.name || item.medicineName || 'Product').join(', ');
+          // Limit length for display
+          if (productNames.length > 100) {
+            productNames = productNames.substring(0, 97) + '...';
+          }
+        }
+        
         orders.push({
           id: doc.id,
           ...data,
           date: data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
-          customer: data.userName || 'Customer',
-          address: data.address || 'No address provided',
+          customer: customerName,
+          address: fullAddress,
+          productNames: productNames,
           items: data.items?.length || 0,
-          total: data.total ? `₹${data.total}` : 'N/A',
+          total: data.total ? `₹${data.total}` : (data.totalAmount ? `₹${data.totalAmount}` : 'N/A'),
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date()
         });
@@ -1903,14 +1976,56 @@ export const getDeliveryOrders = async (deliveryPersonId) => {
       const orders = [];
       simpleSnapshot.forEach((doc) => {
         const data = doc.data();
+        
+        // Extract customer name from various possible locations
+        let customerName = data.userName || 'Customer';
+        if (!data.userName) {
+          const addr = data.shippingAddress || data.deliveryAddress;
+          if (addr) {
+            if (addr.firstName && addr.lastName) {
+              customerName = `${addr.firstName} ${addr.lastName}`;
+            } else if (addr.firstName) {
+              customerName = addr.firstName;
+            } else if (addr.name) {
+              customerName = addr.name;
+            }
+          }
+        }
+        
+        // Extract address from various possible locations
+        let fullAddress = data.address || 'No address provided';
+        if (!data.address) {
+          const addr = data.shippingAddress || data.deliveryAddress;
+          if (addr) {
+            const parts = [];
+            if (addr.address) parts.push(addr.address);
+            if (addr.city) parts.push(addr.city);
+            if (addr.state) parts.push(addr.state);
+            if (addr.pincode) parts.push(addr.pincode);
+            if (parts.length > 0) {
+              fullAddress = parts.join(', ');
+            }
+          }
+        }
+        
+        // Extract product names from items
+        let productNames = 'No items';
+        if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+          productNames = data.items.map(item => item.name || item.medicineName || 'Product').join(', ');
+          if (productNames.length > 100) {
+            productNames = productNames.substring(0, 97) + '...';
+          }
+        }
+        
         orders.push({
           id: doc.id,
           ...data,
           date: data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleDateString() : 'N/A',
-          customer: data.userName || 'Customer',
-          address: data.address || 'No address provided',
+          customer: customerName,
+          address: fullAddress,
+          productNames: productNames,
           items: data.items?.length || 0,
-          total: data.total ? `₹${data.total}` : 'N/A'
+          total: data.total ? `₹${data.total}` : (data.totalAmount ? `₹${data.totalAmount}` : 'N/A')
         });
       });
       
@@ -1961,7 +2076,8 @@ export const updateOrderStatus = async (orderId, status, otpCode = null) => {
         if (userSnap.exists()) {
           const userData = userSnap.data();
           
-          // Call the backend notification API
+          // Call the backend notification API for status updates
+          // This will send OTP email when status is "Out for Delivery"
           const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4321'}/api/notifications/order-status-update`, {
             method: 'POST',
             headers: {
@@ -1969,7 +2085,7 @@ export const updateOrderStatus = async (orderId, status, otpCode = null) => {
               'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
             body: JSON.stringify({
-              order: orderData,
+              order: { ...orderData, orderId: orderData.orderId || orderId },
               user: userData,
               status
             })
@@ -2063,7 +2179,7 @@ export const assignDeliveryPerson = async (orderId, deliveryPersonId) => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
-          order: orderData,
+          order: { ...orderData, orderId: orderData.orderId || orderId },
           deliveryPerson: { ...deliveryPersonData, uid: deliveryPersonId }
         })
       });

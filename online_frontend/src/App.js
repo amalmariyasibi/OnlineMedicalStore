@@ -36,6 +36,9 @@ import DiseaseMedicineFinder from "./pages/DiseaseMedicineFinder";
 import HealthChatbot from "./pages/HealthChatbot";
 import PrescriptionScannerPage from "./pages/PrescriptionScannerPage";
 import MedicineScanner from "./pages/MedicineScanner";
+import FeedbackForm from "./pages/FeedbackForm";
+import MyFeedbacks from "./pages/MyFeedbacks";
+import FeedbackAnalytics from "./pages/FeedbackAnalytics";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { CartProvider } from "./contexts/CartContextSimple";
 import CartIcon from "./components/CartIcon";
@@ -448,6 +451,24 @@ function App() {
                 <MedicineScanner />
               </ProtectedRoute>
             } />
+            
+            {/* Feedback routes */}
+            <Route path="/feedback/:orderId" element={
+              <ProtectedRoute>
+                <FeedbackForm />
+              </ProtectedRoute>
+            } />
+            <Route path="/my-feedbacks" element={
+              <ProtectedRoute>
+                <MyFeedbacks />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/feedback-analytics" element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <FeedbackAnalytics />
+              </ProtectedRoute>
+            } />
+            
             {/* <Route path="/payment-test" element={
               <ProtectedRoute>
                 <PaymentTest />

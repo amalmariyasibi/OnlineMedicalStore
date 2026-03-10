@@ -1,4 +1,5 @@
 const notificationService = require('../services/notificationService');
+const deliveryOtpService = require('../services/deliveryOtpService');
 
 /**
  * Send email notification
@@ -234,11 +235,53 @@ const sendPushNotification = async (req, res) => {
   }
 };
 
+/**
+ * Send delivery OTP email to customer
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+const sendDeliveryOtp = async (req, res) => {
+  try {
+    const { order, user } = req.body;
+    
+    if (!order || !user) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Order and user details are required' 
+      });
+    }
+    
+    const result = await deliveryOtpService.sendDeliveryOtpEmail(order, user);
+    
+    if (result.success) {
+      return res.status(200).json({
+        success: true,
+        message: 'Delivery OTP email sent successfully',
+        messageId: result.messageId
+      });
+    } else {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send delivery OTP email',
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Error in sendDeliveryOtp controller:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   sendEmailNotification,
   sendOrderConfirmation,
   sendOrderStatusUpdate,
   sendDeliveryAssignment,
   generateDeliveryOTP,
-  sendPushNotification
+  sendPushNotification,
+  sendDeliveryOtp
 };

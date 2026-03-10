@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserData, createUserData } from '../firebase';
 import { setUserAsAdmin } from '../utils/adminUtils';
@@ -140,10 +141,10 @@ const AdminDebug = () => {
       <div className="bg-white shadow rounded-lg p-6 mt-6">
         <h2 className="text-lg font-semibold mb-4">Navigation</h2>
         <div className="space-x-4">
-          <a href="/admin" className="text-blue-500 hover:text-blue-700">Go to Admin Dashboard</a>
-          <a href="/delivery" className="text-blue-500 hover:text-blue-700">Go to Delivery Dashboard</a>
-          <a href="/user-dashboard" className="text-blue-500 hover:text-blue-700">Go to User Dashboard</a>
-          <a href="/login" className="text-blue-500 hover:text-blue-700">Go to Login</a>
+          <Link to="/admin" className="text-blue-500 hover:text-blue-700">Go to Admin Dashboard</Link>
+          <Link to="/delivery" className="text-blue-500 hover:text-blue-700">Go to Delivery Dashboard</Link>
+          <Link to="/user-dashboard" className="text-blue-500 hover:text-blue-700">Go to User Dashboard</Link>
+          <Link to="/login" className="text-blue-500 hover:text-blue-700">Go to Login</Link>
         </div>
       </div>
     </div>

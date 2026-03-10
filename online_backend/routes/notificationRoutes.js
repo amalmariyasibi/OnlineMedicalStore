@@ -51,4 +51,12 @@ router.post(
   notificationController.sendPushNotification
 );
 
+// Route to send delivery OTP email to customer (admin only)
+router.post(
+  '/send-delivery-otp',
+  protect,
+  authorize('admin'),
+  notificationController.sendDeliveryOtp
+);
+
 module.exports = router;

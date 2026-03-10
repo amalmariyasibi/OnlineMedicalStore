@@ -184,6 +184,14 @@ const sendOrderStatusUpdateEmail = async (order, user, status) => {
       statusMessage = 'Your order is now being processed.';
       statusColor = '#FFA500'; // Orange
       break;
+    case 'Approved':
+      statusMessage = 'Your order has been approved and is being prepared.';
+      statusColor = '#10B981'; // Green
+      break;
+    case 'Picked Up':
+      statusMessage = 'Your order has been picked up by our delivery person and is on the way!';
+      statusColor = '#8B5CF6'; // Purple
+      break;
     case 'Shipped':
       statusMessage = 'Your order has been shipped and is on its way to you.';
       statusColor = '#4299E1'; // Blue

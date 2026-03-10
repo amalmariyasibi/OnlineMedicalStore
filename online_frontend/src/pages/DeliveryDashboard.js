@@ -11,8 +11,6 @@ function DeliveryDashboard() {
   const [success, setSuccess] = useState("");
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
-  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState(null);
   const [otpCode, setOtpCode] = useState("");
   const [updatingOrder, setUpdatingOrder] = useState(false);
   const [activeTab, setActiveTab] = useState('assigned');
@@ -169,17 +167,23 @@ function DeliveryDashboard() {
 
   // Handle status update
   const handleUpdateStatus = async (orderId, newStatus) => {
-    // If status is "Delivered", we need OTP verification
-    if (newStatus === "Delivered") {
-      const order = orders.find(o => o.id === orderId);
-      setSelectedOrder(order);
-      setIsOtpModalOpen(true);
-      return;
-    }
-    
-    // For other status updates, proceed directly
+    // For all status updates, proceed directly
     try {
       setUpdatingOrder(true);
+      
+      // If status is "Delivered", redirect to OTP Verification tab
+      if (newStatus === "Delivered") {
+        const order = orders.find(o => o.id === orderId);
+        if (order) {
+          setSelectedForOtp(order);
+          setActiveTab('otp');
+          setSuccess("Please enter the customer's OTP in the OTP Verification tab");
+          setTimeout(() => setSuccess(""), 3000);
+        }
+        setUpdatingOrder(false);
+        return;
+      }
+      
       const result = await updateOrderStatus(orderId, newStatus);
       
       if (result.success) {
@@ -201,37 +205,7 @@ function DeliveryDashboard() {
     }
   };
   
-  // Handle OTP verification and delivery confirmation
-  const handleDeliveryConfirmation = async () => {
-    if (!selectedOrder || !otpCode) return;
-    
-    try {
-      setUpdatingOrder(true);
-      const result = await updateOrderStatus(selectedOrder.id, "Delivered", otpCode);
-      
-      if (result.success) {
-        setSuccess("Order marked as delivered successfully");
-        // Update local state
-        setOrders(orders.map(order => 
-          order.id === selectedOrder.id ? { ...order, status: "Delivered" } : order
-        ));
-        
-        // Close modal and reset
-        setIsOtpModalOpen(false);
-        setSelectedOrder(null);
-        setOtpCode("");
-        
-        // Clear success message after 3 seconds
-        setTimeout(() => setSuccess(""), 3000);
-      } else {
-        setError(result.error || "Failed to verify OTP");
-      }
-    } catch (err) {
-      setError("Error confirming delivery: " + err.message);
-    } finally {
-      setUpdatingOrder(false);
-    }
-  };
+  // Handle OTP verification and delivery confirmation (removed - use OTP Verification tab instead)
 
   if (loading) {
     return (
@@ -348,6 +322,19 @@ function DeliveryDashboard() {
             </div>
           )}
 
+          {/* Success Alert */}
+          {success && (
+            <div className="bg-green-50 border border-green-300 rounded-md p-4">
+              <div className="flex items-center">
+                <span className="text-green-600 text-xl mr-3">✓</span>
+                <div className="text-sm text-green-800">
+                  <p className="font-semibold">Success!</p>
+                  <p className="mt-1">{success}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* OTP Verification */}
           {activeTab === 'otp' && (
           <section className="space-y-4">
@@ -393,6 +380,10 @@ function DeliveryDashboard() {
                       <div>
                         <p className="font-medium">Customer</p>
                         <p className="text-gray-600">{selectedForOtp.customer}</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <p className="font-medium">Products Ordered</p>
+                        <p className="text-gray-600">{selectedForOtp.productNames || 'No product details'}</p>
                       </div>
                       <div className="md:col-span-2">
                         <p className="font-medium">Delivery Address</p>
@@ -534,6 +525,10 @@ function DeliveryDashboard() {
                         <span>{order.address}</span>
                       </div>
                       <div className="flex items-center space-x-2">
+                        <span className="text-gray-400">📦</span>
+                        <span className="font-medium">{order.productNames || 'No product details'}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
                         <span className="text-gray-400">🧾</span>
                         <span>{order.items} items · {order.total}</span>
                       </div>
@@ -640,6 +635,10 @@ function DeliveryDashboard() {
                         <p className="text-gray-600">{selectedForUpdate.items} · {selectedForUpdate.total}</p>
                       </div>
                       <div className="md:col-span-2">
+                        <p className="font-medium">Products Ordered</p>
+                        <p className="text-gray-600">{selectedForUpdate.productNames || 'No product details'}</p>
+                      </div>
+                      <div className="md:col-span-2">
                         <p className="font-medium">Delivery Address</p>
                         <p className="text-gray-600">{selectedForUpdate.address}</p>
                       </div>
@@ -711,79 +710,6 @@ function DeliveryDashboard() {
             <div>
               <p className="font-bold">Success</p>
               <p className="text-sm">{success}</p>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* OTP Verification Modal */}
-      {isOtpModalOpen && (
-        <div className="fixed z-10 inset-0 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
-            </div>
-            
-            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <div className="sm:flex sm:items-start">
-                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                  </div>
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900">
-                      Delivery Confirmation
-                    </h3>
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-500">
-                        Please enter the OTP code provided by the customer to confirm delivery.
-                      </p>
-                      <div className="mt-4">
-                        <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
-                          OTP Code
-                        </label>
-                        <input
-                          type="text"
-                          name="otp"
-                          id="otp"
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          placeholder="Enter 6-digit OTP"
-                          value={otpCode}
-                          onChange={(e) => setOtpCode(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button
-                  type="button"
-                  className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm ${
-                    updatingOrder || !otpCode ? "opacity-50 cursor-not-allowed" : ""
-                  }`}
-                  onClick={handleDeliveryConfirmation}
-                  disabled={updatingOrder || !otpCode}
-                >
-                  {updatingOrder ? "Verifying..." : "Confirm Delivery"}
-                </button>
-                <button
-                  type="button"
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                  onClick={() => {
-                    setIsOtpModalOpen(false);
-                    setSelectedOrder(null);
-                    setOtpCode("");
-                  }}
-                  disabled={updatingOrder}
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           </div>
         </div>

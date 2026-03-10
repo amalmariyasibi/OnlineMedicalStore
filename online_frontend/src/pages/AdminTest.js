@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { createAdminUser, testAdminLogin } from '../utils/createAdminUser';
 import { logoutUser } from '../firebase';
@@ -162,9 +163,9 @@ const AdminTest = () => {
       <div className="bg-white shadow rounded-lg p-6 mt-6">
         <h2 className="text-lg font-semibold mb-4">Navigation</h2>
         <div className="space-x-4">
-          <a href="/admin" className="text-blue-500 hover:text-blue-700">Go to Admin Dashboard</a>
-          <a href="/login" className="text-blue-500 hover:text-blue-700">Go to Login</a>
-          <a href="/" className="text-blue-500 hover:text-blue-700">Go to Home</a>
+          <Link to="/admin" className="text-blue-500 hover:text-blue-700">Go to Admin Dashboard</Link>
+          <Link to="/login" className="text-blue-500 hover:text-blue-700">Go to Login</Link>
+          <Link to="/" className="text-blue-500 hover:text-blue-700">Go to Home</Link>
         </div>
       </div>
     </div>

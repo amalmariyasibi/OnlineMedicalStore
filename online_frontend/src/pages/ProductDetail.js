@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { getProductById, getAlternativeProducts } from "../firebase";
 import { useCart } from "../contexts/CartContextSimple";
 
@@ -118,7 +118,7 @@ function ProductDetail() {
           <ol className="flex items-center space-x-2">
             <li>
               <div className="flex items-center">
-                <a href="/" className="text-gray-400 hover:text-gray-500">Home</a>
+                <Link to="/" className="text-gray-400 hover:text-gray-500">Home</Link>
               </div>
             </li>
             <li>
@@ -126,7 +126,7 @@ function ProductDetail() {
                 <svg className="flex-shrink-0 h-5 w-5 text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path d="M5.555 17.776l8-16 .894.448-8 16-.894-.448z" />
                 </svg>
-                <a href="/products" className="ml-2 text-gray-400 hover:text-gray-500">Products</a>
+                <Link to="/products" className="ml-2 text-gray-400 hover:text-gray-500">Products</Link>
               </div>
             </li>
             <li>
