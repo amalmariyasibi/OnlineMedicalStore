@@ -94,71 +94,94 @@ function Cart() {
             <div className="lg:grid lg:grid-cols-12 lg:gap-x-12 lg:items-start">
               <div className="lg:col-span-7">
                 <div className="border-t border-b border-gray-200 divide-y divide-gray-200">
-                  {items.map((item) => (
-                    <div key={item.id} className="py-6 flex">
-                      <div className="flex-shrink-0 w-24 h-24 border border-gray-200 rounded-md overflow-hidden">
-                        <img
-                          src={item.imageUrl || "https://placehold.co/96x96?text=No+Image"}
-                          alt={item.name}
-                          className="w-full h-full object-center object-cover"
-                          onError={(e) => {
-                            e.currentTarget.onerror = null;
-                            e.currentTarget.src = "https://placehold.co/96x96?text=No+Image";
-                          }}
-                        />
-                      </div>
-                      
-                      <div className="ml-4 flex-1 flex flex-col">
-                        <div>
-                          <div className="flex justify-between text-base font-medium text-gray-900">
-                            <h3>
-                              <Link to={`/${item.requiresPrescription !== undefined ? "medicines" : "products"}/${item.id}`}>
-                                {item.name}
-                              </Link>
-                            </h3>
-                            <p className="ml-4">₹{(item.price * item.quantity).toFixed(2)}</p>
-                          </div>
-                          <p className="mt-1 text-sm text-gray-500">{item.category}</p>
-                          {item.requiresPrescription && (
-                            <span className="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                              Prescription Required
-                            </span>
-                          )}
+                  {items.map((item) => {
+                    // Determine image source with multiple fallbacks
+                    let imageSrc;
+                    const itemName = item.name.toLowerCase();
+                    
+                    // Check if this is a belladona/bellidopnas medicine
+                    if (itemName.includes('belladona') || itemName.includes('bellidopnas') || itemName.includes('belladonna')) {
+                      // Use the specific image URL for this medicine
+                      imageSrc = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRYqDXmwjb5_8yxVUoXrwQajzp5ZsAVYUk1kg&s';
+                    } else if (item.imageUrl && item.imageUrl.trim() !== '') {
+                      // Use the product's image URL if available
+                      imageSrc = item.imageUrl;
+                    } else {
+                      // Fallback to placeholder
+                      imageSrc = "https://placehold.co/96x96?text=No+Image";
+                    }
+                    
+                    return (
+                      <div key={item.id} className="py-6 flex">
+                        <div className="flex-shrink-0 w-24 h-24 border border-gray-200 rounded-md overflow-hidden bg-white">
+                          <img
+                            src={imageSrc}
+                            alt={item.name}
+                            className="w-full h-full object-center object-cover"
+                            onError={(e) => {
+                              console.log('❌ Image failed to load:', e.target.src);
+                              console.log('Item details:', item.name, item.id);
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = "https://placehold.co/96x96?text=No+Image";
+                            }}
+                            onLoad={(e) => {
+                              console.log('✅ Image loaded successfully:', item.name);
+                            }}
+                          />
                         </div>
                         
-                        <div className="flex-1 flex items-end justify-between text-sm">
-                          <div className="flex items-center">
-                            <label htmlFor={`quantity-${item.id}`} className="mr-2 text-gray-500">
-                              Qty
-                            </label>
-                            <select
-                              id={`quantity-${item.id}`}
-                              name={`quantity-${item.id}`}
-                              value={item.quantity}
-                              onChange={(e) => handleQuantityChange(item.id, e.target.value)}
-                              className="max-w-full rounded-md border border-gray-300 py-1.5 text-base leading-5 font-medium text-gray-700 text-left shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                            >
-                              {[...Array(Math.min(10, item.stockQuantity)).keys()].map((i) => (
-                                <option key={i + 1} value={i + 1}>
-                                  {i + 1}
-                                </option>
-                              ))}
-                            </select>
+                        <div className="ml-4 flex-1 flex flex-col">
+                          <div>
+                            <div className="flex justify-between text-base font-medium text-gray-900">
+                              <h3>
+                                <Link to={`/${item.requiresPrescription !== undefined ? "medicines" : "products"}/${item.id}`}>
+                                  {item.name}
+                                </Link>
+                              </h3>
+                              <p className="ml-4">₹{(item.price * item.quantity).toFixed(2)}</p>
+                            </div>
+                            <p className="mt-1 text-sm text-gray-500">{item.category}</p>
+                            {item.requiresPrescription && (
+                              <span className="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                Prescription Required
+                              </span>
+                            )}
                           </div>
                           
-                          <div className="flex">
-                            <button
-                              type="button"
-                              className="font-medium text-blue-600 hover:text-blue-500"
-                              onClick={() => handleRemoveItem(item.id)}
-                            >
-                              Remove
-                            </button>
+                          <div className="flex-1 flex items-end justify-between text-sm">
+                            <div className="flex items-center">
+                              <label htmlFor={`quantity-${item.id}`} className="mr-2 text-gray-500">
+                                Qty
+                              </label>
+                              <select
+                                id={`quantity-${item.id}`}
+                                name={`quantity-${item.id}`}
+                                value={item.quantity}
+                                onChange={(e) => handleQuantityChange(item.id, e.target.value)}
+                                className="max-w-full rounded-md border border-gray-300 py-1.5 text-base leading-5 font-medium text-gray-700 text-left shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                              >
+                                {[...Array(Math.min(10, item.stockQuantity)).keys()].map((i) => (
+                                  <option key={i + 1} value={i + 1}>
+                                    {i + 1}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            
+                            <div className="flex">
+                              <button
+                                type="button"
+                                className="font-medium text-blue-600 hover:text-blue-500"
+                                onClick={() => handleRemoveItem(item.id)}
+                              >
+                                Remove
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 
                 <div className="mt-4">

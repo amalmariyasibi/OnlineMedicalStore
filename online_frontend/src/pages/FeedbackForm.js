@@ -19,7 +19,7 @@ const FeedbackForm = () => {
 
   useEffect(() => {
     fetchExistingFeedback();
-  }, [orderId]);
+  }, [orderId, fetchExistingFeedback]);
 
   const fetchExistingFeedback = async () => {
     try {

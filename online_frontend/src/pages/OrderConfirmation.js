@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getOrderById } from '../firebase';
 // We'll handle cart operations separately without affecting the page loading state
@@ -10,30 +10,68 @@ const OrderConfirmation = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { addFullProductToCart } = useCart();
+  const hasFetchedRef = useRef(false);
+  const fetchCompleteRef = useRef(false); // Track if fetch completed successfully
+  
+  console.log('=== OrderConfirmation Component Render ===');
+  console.log('Current orderId:', orderId);
+  console.log('Has fetched?', hasFetchedRef.current);
+  console.log('Fetch complete?', fetchCompleteRef.current);
   
   useEffect(() => {
+    // Only fetch if we haven't fetched yet AND orderId exists
+    if (!orderId || hasFetchedRef.current) {
+      if (!orderId && !hasFetchedRef.current) {
+        console.error("No orderId in URL parameters");
+        setError('No order ID provided in the URL.');
+        setLoading(false);
+      } else if (hasFetchedRef.current && !fetchCompleteRef.current) {
+        console.log('Fetch already in progress, waiting...');
+      } else {
+        console.log('Already fetched this order');
+      }
+      return;
+    }
+    
+    // Mark that we're fetching this order
+    hasFetchedRef.current = true;
+    
     const fetchOrder = async () => {
       try {
         setLoading(true);
         setError('');
         
-        console.log("Fetching order with ID:", orderId);
-        const orderData = await getOrderById(orderId);
-        console.log("Order data received:", orderData);
+        console.log("=== Starting Order Fetch ===");
+        console.log("Order ID:", orderId);
         
+        // Wait for Firestore commit
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        console.log("Fetching from Firestore...");
+        const orderData = await getOrderById(orderId);
+        console.log("✓ Order fetched:", orderData?.success);
+        
+        // IMPORTANT: Even if component unmounted during fetch, 
+        // we still want to process the data when it remounts
+        // So we store it in refs temporarily
         if (orderData && orderData.success) {
-          setOrder(orderData);
+          console.log("✓ Order data received successfully");
           
-          // Add ordered items back to cart (separate from page loading)
-          if (orderData.order && orderData.order.items) {
-            console.log("Adding items to cart:", orderData.order.items);
-            // We'll add items to cart in the background without affecting page loading
-            setTimeout(async () => {
-              try {
-                // Add each item to the cart
-                for (const item of orderData.order.items) {
+          // Store in ref as backup
+          window.lastOrderData = orderData; // Temporary storage
+          
+          // Try to update state (may fail if unmounted)
+          try {
+            setOrder(orderData);
+            fetchCompleteRef.current = true;
+            console.log("✓ State updated");
+            
+            // Add items to cart
+            if (orderData.order && orderData.order.items) {
+              console.log("Processing cart items...");
+              setTimeout(() => {
+                orderData.order.items.forEach((item) => {
                   try {
-                    // Ensure item has all required properties
                     const productToAdd = {
                       id: item.id || item.productId,
                       name: item.name || 'Product',
@@ -41,40 +79,46 @@ const OrderConfirmation = () => {
                       quantity: Number(item.quantity) || 1,
                       requiresPrescription: Boolean(item.requiresPrescription) || false,
                       imageUrl: item.imageUrl || '',
-                      ...item // Include any other properties
+                      ...item
                     };
-                    console.log("Adding product to cart:", productToAdd);
-                    // We don't await this to avoid blocking the UI
                     addFullProductToCart(productToAdd, productToAdd.quantity);
-                  } catch (addError) {
-                    console.error('Failed to add item to cart:', item, addError);
-                    // Continue with other items even if one fails
+                  } catch (e) {
+                    console.log('Cart add error:', e.message);
                   }
-                }
-              } catch (cartError) {
-                console.error('Error adding items to cart:', cartError);
-              }
-            }, 0);
+                });
+                console.log("✓ Cart processing complete");
+              }, 100);
+            }
+          } catch (stateError) {
+            console.log('State update prevented (component may be unmounting)');
+            // Data is still in window.lastOrderData for next mount
           }
+          
+          setLoading(false);
         } else {
+          console.error("✗ Order fetch failed");
           setError(orderData?.error || 'Order not found');
+          setLoading(false);
         }
       } catch (err) {
-        console.error("Order fetch error:", err);
-        setError('Failed to load order details: ' + err.message);
-      } finally {
-        // Always set loading to false after fetching order data
+        console.error("Fetch error:", err.message);
+        setError('Failed to load: ' + err.message);
         setLoading(false);
       }
     };
     
-    if (orderId) {
-      fetchOrder();
-    } else {
-      setError('No order ID provided');
+    fetchOrder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
+  
+  // If we have data in window from previous mount attempt, use it
+  useEffect(() => {
+    if (window.lastOrderData && window.lastOrderData.orderId === orderId && !order) {
+      console.log("Restoring order from temporary storage");
+      setOrder(window.lastOrderData);
       setLoading(false);
     }
-  }, [orderId]);
+  }, [orderId, order]);
   
   if (loading) {
     return (
@@ -237,12 +281,20 @@ const OrderConfirmation = () => {
                     {orderData.items && orderData.items.map((item, index) => (
                       <li key={index} className="py-3 flex justify-between">
                         <div className="flex items-center">
-                          {item.imageUrl && (
+                          {item.imageUrl ? (
                             <img 
                               src={item.imageUrl} 
                               alt={item.name} 
-                              className="h-16 w-16 object-cover rounded mr-4" 
+                              className="h-16 w-16 object-cover rounded mr-4"
+                              onError={(e) => {
+                                console.log('Image failed to load:', item.imageUrl);
+                                e.target.src = 'https://via.placeholder.com/64x64?text=No+Image';
+                              }} 
                             />
+                          ) : (
+                            <div className="h-16 w-16 bg-gray-200 rounded mr-4 flex items-center justify-center">
+                              <span className="text-xs text-gray-500">No Image</span>
+                            </div>
                           )}
                           <div>
                             <p className="font-medium">{item.name}</p>

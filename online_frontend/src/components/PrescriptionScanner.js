@@ -2,11 +2,10 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContextSimple';
-import Fuse from 'fuse.js';
 
 const PrescriptionScanner = ({ onComplete }) => {
   const { currentUser } = useAuth();
-  const { addToCart } = useCart();
+  const { addFullProductToCart } = useCart();
   const navigate = useNavigate();
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -151,7 +150,8 @@ const PrescriptionScanner = ({ onComplete }) => {
     }
 
     try {
-      await addToCart(medicine.matched, 1);
+      // Use addFullProductToCart with the matched medicine object
+      await addFullProductToCart(medicine.matched, 1);
       
       // Save correction for learning
       await fetch('/api/prescriptions/corrections', {
@@ -179,6 +179,11 @@ const PrescriptionScanner = ({ onComplete }) => {
       
       // Show success message
       setSuccess(`${medicine.matched.name} added to cart!`);
+      
+      // Navigate to cart page after a short delay
+      setTimeout(() => {
+        navigate('/cart');
+      }, 1000);
     } catch (err) {
       console.error('Add to cart error:', err);
       setError('Failed to add medicine to cart');
@@ -199,7 +204,8 @@ const PrescriptionScanner = ({ onComplete }) => {
     
     try {
       for (const medicine of matchedItems) {
-        await addToCart(medicine.matched, 1);
+        // Use addFullProductToCart with the matched medicine object
+        await addFullProductToCart(medicine.matched, 1);
         
         // Save correction
         await fetch('/api/prescriptions/corrections', {

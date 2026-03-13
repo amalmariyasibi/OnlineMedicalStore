@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import PrescriptionUpload from '../components/PrescriptionUpload';
 import PrescriptionList from '../components/PrescriptionList';
-import { getUserPrescriptions, deletePrescription, getSignedUrl } from '../services/prescriptionService';
+import { getUserPrescriptions, deletePrescription } from '../services/prescriptionService';
 
 const Prescriptions = () => {
   const { currentUser } = useAuth();

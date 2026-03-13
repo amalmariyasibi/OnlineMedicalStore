@@ -18,59 +18,17 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState("customer"); // Add role state
   const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
   
-  // Debounce timer for email check
-  const [emailCheckTimer, setEmailCheckTimer] = useState(null);
-
   // Check if user is already logged in
   useEffect(() => {
     if (isAuthenticated()) {
       navigate("/");
     }
   }, [navigate]);
-  
-  // Handle email change with debounced validation
-  const handleEmailChange = (e) => {
-    const newEmail = e.target.value;
-    setEmail(newEmail);
-    
-    // Clear any existing email errors when the user types
-    setErrors(prev => ({...prev, email: undefined}));
-    
-    // Clear any existing timer
-    if (emailCheckTimer) {
-      clearTimeout(emailCheckTimer);
-    }
-    
-    // Only check if email exists if it's a valid email format
-    if (newEmail && /\S+@\S+\.\S+/.test(newEmail)) {
-      setIsCheckingEmail(true);
-      
-      // Set a new timer to check after user stops typing for 800ms
-      const timer = setTimeout(async () => {
-        try {
-          const emailCheck = await checkEmailExists(newEmail);
-          if (emailCheck.exists) {
-            setErrors(prev => ({
-              ...prev, 
-              email: "This email is already registered. Please use a different email or sign in."
-            }));
-          }
-        } catch (error) {
-          console.error("Error checking email:", error);
-        } finally {
-          setIsCheckingEmail(false);
-        }
-      }, 800);
-      
-      setEmailCheckTimer(timer);
-    }
-  };
 
   // Validation function
   const validateForm = async () => {

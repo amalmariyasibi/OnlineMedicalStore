@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, query, where, Timestamp, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, Timestamp, deleteDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 
 // Sample orders data

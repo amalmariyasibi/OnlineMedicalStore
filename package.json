@@ -10,5 +10,8 @@
   "workspaces": [
     "online_frontend",
     "online_backend"
-  ]
+  ],
+  "dependencies": {
+    "react-scripts": "^5.0.1"
+  }
 }

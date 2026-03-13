@@ -86,59 +86,142 @@ const HealthChatbot = () => {
     const medicines = [];
     const matchedSymptoms = [];
 
-    // Symptom database
+    // Enhanced Symptom database with comprehensive medicine suggestions
     const symptomDB = {
       'headache': [
         { name: 'Paracetamol 500mg', description: 'Pain reliever and fever reducer', dosage: '1-2 tablets every 4-6 hours', available: true },
-        { name: 'Ibuprofen 400mg', description: 'Anti-inflammatory pain reliever', dosage: '1 tablet every 6-8 hours', available: true }
+        { name: 'Ibuprofen 400mg', description: 'Anti-inflammatory pain reliever', dosage: '1 tablet every 6-8 hours with food', available: true },
+        { name: 'Aspirin 75mg', description: 'Pain reliever and blood thinner', dosage: '1 tablet daily', available: true }
       ],
       'fever': [
-        { name: 'Paracetamol 500mg', description: 'Fever reducer', dosage: '1-2 tablets every 4-6 hours', available: true },
-        { name: 'Aspirin 325mg', description: 'Pain reliever and fever reducer', dosage: '1-2 tablets every 4 hours', available: true }
+        { name: 'Paracetamol 500mg', description: 'Fever reducer and pain reliever', dosage: '1-2 tablets every 4-6 hours', available: true },
+        { name: 'Ibuprofen 400mg', description: 'Anti-inflammatory and fever reducer', dosage: '1 tablet every 8 hours', available: true },
+        { name: 'Dolo 650mg', description: 'Strong fever reducer', dosage: '1 tablet every 6 hours', available: true }
       ],
       'cough': [
         { name: 'Dextromethorphan Syrup', description: 'Cough suppressant', dosage: '10ml every 6-8 hours', available: true },
-        { name: 'Honey-based Cough Syrup', description: 'Natural cough relief', dosage: '10ml 3 times daily', available: true }
+        { name: 'Ambroxol Syrup', description: 'Expectorant - helps clear mucus', dosage: '10ml 3 times daily', available: true },
+        { name: 'Honey-based Cough Syrup', description: 'Natural cough relief', dosage: '10ml 3 times daily', available: true },
+        { name: 'Vicks Vaporub', description: 'Topical cough relief', dosage: 'Apply on chest 2-3 times daily', available: true }
       ],
       'cold': [
-        { name: 'Cetirizine 10mg', description: 'Antihistamine for cold symptoms', dosage: '1 tablet once daily', available: true },
-        { name: 'Vitamin C 500mg', description: 'Immune system support', dosage: '1 tablet daily', available: true }
+        { name: 'Cetirizine 10mg', description: 'Antihistamine for cold symptoms', dosage: '1 tablet once daily at bedtime', available: true },
+        { name: 'Chlorpheniramine 4mg', description: 'Relieves runny nose and sneezing', dosage: '1 tablet every 4-6 hours', available: true },
+        { name: 'Vitamin C 500mg', description: 'Immune system support', dosage: '1 tablet daily', available: true },
+        { name: 'Zinc Tablets', description: 'Boosts immunity', dosage: '1 tablet daily', available: true }
       ],
       'sore throat': [
-        { name: 'Throat Lozenges', description: 'Soothes throat irritation', dosage: '1 lozenge every 2-3 hours', available: true },
-        { name: 'Antiseptic Gargle', description: 'Antibacterial throat gargle', dosage: 'Gargle 3-4 times daily', available: true }
+        { name: 'Throat Lozenges (Strepsils)', description: 'Soothes throat irritation', dosage: '1 lozenge every 2-3 hours', available: true },
+        { name: 'Betadine Gargle', description: 'Antiseptic throat gargle', dosage: 'Gargle 3-4 times daily', available: true },
+        { name: 'Hexidine Mouthwash', description: 'Antibacterial mouth and throat rinse', dosage: 'Rinse twice daily', available: true },
+        { name: 'Warm Salt Water', description: 'Natural throat soother', dosage: 'Gargle 3-4 times daily', available: true }
       ],
-      'stomach': [
-        { name: 'Antacid Tablets', description: 'Relieves stomach acidity', dosage: '1-2 tablets after meals', available: true },
-        { name: 'Omeprazole 20mg', description: 'Reduces stomach acid', dosage: '1 capsule before breakfast', available: true }
+      'stomach pain': [
+        { name: 'Antacid Tablets (Digene)', description: 'Relieves stomach acidity and gas', dosage: '1-2 tablets after meals', available: true },
+        { name: 'Omeprazole 20mg', description: 'Reduces stomach acid', dosage: '1 capsule before breakfast', available: true },
+        { name: 'Pantoprazole 40mg', description: 'Long-lasting acid reducer', dosage: '1 tablet before breakfast', available: true },
+        { name: 'Gas-X (Simethicone)', description: 'Relieves gas and bloating', dosage: '1 tablet after meals', available: true }
       ],
       'diarrhea': [
         { name: 'Loperamide 2mg', description: 'Anti-diarrheal medication', dosage: '2 tablets initially, then 1 after each loose stool', available: true },
-        { name: 'ORS (Oral Rehydration Solution)', description: 'Prevents dehydration', dosage: 'As needed', available: true }
+        { name: 'ORS (Oral Rehydration Solution)', description: 'Prevents dehydration', dosage: 'Drink as needed', available: true },
+        { name: 'Probiotic Capsules', description: 'Restores good gut bacteria', dosage: '1 capsule twice daily', available: true },
+        { name: 'Bismuth Subsalicylate', description: 'Treats diarrhea and upset stomach', dosage: '1 tablet every 30 minutes as needed', available: true }
       ],
       'nausea': [
         { name: 'Ondansetron 4mg', description: 'Anti-nausea medication', dosage: '1 tablet every 8 hours', available: true },
-        { name: 'Ginger Capsules', description: 'Natural nausea relief', dosage: '1-2 capsules as needed', available: true }
+        { name: 'Domperidone 10mg', description: 'Relieves nausea and vomiting', dosage: '1 tablet 3 times daily', available: true },
+        { name: 'Ginger Capsules', description: 'Natural nausea relief', dosage: '1-2 capsules as needed', available: true },
+        { name: 'Peppermint Tea', description: 'Natural digestive aid', dosage: '1 cup as needed', available: true }
       ],
       'allergy': [
         { name: 'Cetirizine 10mg', description: 'Antihistamine for allergies', dosage: '1 tablet once daily', available: true },
-        { name: 'Loratadine 10mg', description: 'Non-drowsy allergy relief', dosage: '1 tablet once daily', available: true }
+        { name: 'Loratadine 10mg', description: 'Non-drowsy allergy relief', dosage: '1 tablet once daily', available: true },
+        { name: 'Fexofenadine 120mg', description: 'Long-lasting allergy relief', dosage: '1 tablet once daily', available: true },
+        { name: 'Diphenhydramine 25mg', description: 'For severe allergic reactions', dosage: '1 tablet every 4-6 hours', available: true }
       ],
       'pain': [
-        { name: 'Ibuprofen 400mg', description: 'Pain reliever', dosage: '1 tablet every 6-8 hours', available: true },
-        { name: 'Paracetamol 500mg', description: 'Pain reliever', dosage: '1-2 tablets every 4-6 hours', available: true }
+        { name: 'Ibuprofen 400mg', description: 'Pain reliever and anti-inflammatory', dosage: '1 tablet every 6-8 hours', available: true },
+        { name: 'Paracetamol 500mg', description: 'Pain reliever and fever reducer', dosage: '1-2 tablets every 4-6 hours', available: true },
+        { name: 'Diclofenac Gel', description: 'Topical pain relief', dosage: 'Apply to affected area 3-4 times daily', available: true },
+        { name: 'Volini Spray', description: 'Quick-relief pain spray', dosage: 'Spray on affected area 2-3 times daily', available: true }
       ],
       'acidity': [
         { name: 'Ranitidine 150mg', description: 'Reduces stomach acid', dosage: '1 tablet twice daily', available: true },
-        { name: 'Antacid Syrup', description: 'Quick relief from acidity', dosage: '10ml after meals', available: true }
+        { name: 'Antacid Syrup (Digene)', description: 'Quick relief from acidity', dosage: '10ml after meals', available: true },
+        { name: 'Eno Fruit Salt', description: 'Instant relief from acidity', dosage: '1 sachet in water as needed', available: true },
+        { name: 'Pantoprazole 40mg', description: 'Long-term acid control', dosage: '1 tablet before breakfast', available: true }
+      ],
+      'constipation': [
+        { name: 'Isabgol Husk', description: 'Natural fiber laxative', dosage: '2 tablespoons with water at bedtime', available: true },
+        { name: 'Lactulose Syrup', description: 'Osmotic laxative', dosage: '15ml twice daily', available: true },
+        { name: 'Bisacodyl 5mg', description: 'Stimulant laxative', dosage: '1-2 tablets at bedtime', available: true },
+        { name: 'Triphala Tablets', description: 'Ayurvedic digestive aid', dosage: '2 tablets at bedtime', available: true }
+      ],
+      'vomiting': [
+        { name: 'Ondansetron 4mg', description: 'Prevents nausea and vomiting', dosage: '1 tablet every 8 hours', available: true },
+        { name: 'Domperidone 10mg', description: 'Controls vomiting', dosage: '1 tablet 3 times daily', available: true },
+        { name: 'Electral Powder', description: 'Replenishes electrolytes', dosage: 'Mix with water and sip slowly', available: true },
+        { name: 'Ginger Tea', description: 'Natural anti-nausea remedy', dosage: '1 cup slowly', available: true }
+      ],
+      'body pain': [
+        { name: 'Paracetamol 500mg', description: 'General pain reliever', dosage: '1-2 tablets every 4-6 hours', available: true },
+        { name: 'Ibuprofen 400mg', description: 'Anti-inflammatory for muscle pain', dosage: '1 tablet every 8 hours', available: true },
+        { name: 'Moov Oil', description: 'Topical pain relief oil', dosage: 'Apply and massage gently 2-3 times daily', available: true },
+        { name: 'Volini Gel', description: 'Pain relief gel', dosage: 'Apply to affected area 3-4 times daily', available: true }
+      ],
+      'eye infection': [
+        { name: 'Moxifloxacin Eye Drops', description: 'Antibiotic for eye infections', dosage: '1 drop 3 times daily', available: true },
+        { name: 'Artificial Tears', description: 'Relieves dry and irritated eyes', dosage: '1-2 drops as needed', available: true },
+        { name: 'Ketorolac Eye Drops', description: 'Reduces eye inflammation', dosage: '1 drop 4 times daily', available: true }
+      ],
+      'skin rash': [
+        { name: 'Hydrocortisone Cream 1%', description: 'Reduces itching and inflammation', dosage: 'Apply thin layer 2-3 times daily', available: true },
+        { name: 'Calamine Lotion', description: 'Soothes skin irritation', dosage: 'Apply as needed', available: true },
+        { name: 'Cetirizine 10mg', description: 'Oral antihistamine for rashes', dosage: '1 tablet once daily', available: true },
+        { name: 'Aloe Vera Gel', description: 'Natural skin soother', dosage: 'Apply 2-3 times daily', available: true }
+      ],
+      'acne': [
+        { name: 'Benzoyl Peroxide Gel 2.5%', description: 'Kills acne-causing bacteria', dosage: 'Apply thin layer once daily', available: true },
+        { name: 'Adapalene Gel', description: 'Unclogs pores', dosage: 'Apply at bedtime', available: true },
+        { name: 'Salicylic Acid Face Wash', description: 'Cleans pores and reduces oil', dosage: 'Use twice daily', available: true },
+        { name: 'Clindamycin Gel', description: 'Antibiotic for acne', dosage: 'Apply twice daily', available: true }
+      ],
+      'dandruff': [
+        { name: 'Ketoconazole Shampoo 2%', description: 'Anti-fungal dandruff treatment', dosage: 'Use 2-3 times weekly', available: true },
+        { name: 'Selenium Sulfide Shampoo', description: 'Reduces flaking and itching', dosage: 'Use twice weekly', available: true },
+        { name: 'Tea Tree Oil', description: 'Natural anti-fungal', dosage: 'Mix with shampoo', available: true },
+        { name: 'Coconut Oil + Lemon', description: 'Natural dandruff remedy', dosage: 'Apply before washing', available: true }
       ]
     };
 
-    // Check for matches
-    for (const [symptom, meds] of Object.entries(symptomDB)) {
-      if (symptomsLower.includes(symptom)) {
-        matchedSymptoms.push(symptom);
-        medicines.push(...meds);
+    // Check for matches - Enhanced with fuzzy matching and common misspellings
+    const symptomAliases = {
+      'cough': ['cough', 'couph', 'cof', 'coking', 'cought'],
+      'fever': ['fever', 'fevar', 'tempreature', 'high temperature', 'hot'],
+      'headache': ['headache', 'head ache', 'head pain', 'migraine', 'cephalgia'],
+      'cold': ['cold', 'common cold', 'runny nose', 'sneezing', 'congestion', 'blocked nose'],
+      'sore throat': ['sore throat', 'throat pain', 'throat irritation', 'painful swallowing', 'scratchy throat'],
+      'stomach pain': ['stomach pain', 'stomach ache', 'abdominal pain', 'tummy pain', 'gastric pain', 'belly pain'],
+      'diarrhea': ['diarrhea', 'loose motions', 'diarrohea', 'loose stool', 'frequent stools'],
+      'nausea': ['nausea', 'feeling like vomiting', 'queasy', 'wanting to vomit'],
+      'vomiting': ['vomiting', 'throwing up', 'puking', 'vomit', 'emesis'],
+      'allergy': ['allergy', 'allergic reaction', 'itching', 'hives', 'rashes'],
+      'pain': ['pain', 'ache', 'hurt', 'discomfort', 'soreness'],
+      'acidity': ['acidity', 'acid reflux', 'heartburn', 'gerd', 'gas problem'],
+      'constipation': ['constipation', 'hard stools', 'difficulty passing stools', 'irregular bowel'],
+      'body pain': ['body pain', 'body ache', 'muscle pain', 'joint pain', 'aches all over'],
+      'eye infection': ['eye infection', 'red eyes', 'pink eye', 'eye discharge', 'conjunctivitis'],
+      'skin rash': ['skin rash', 'skin irritation', 'itchy skin', 'red patches', 'hives'],
+      'acne': ['acne', 'pimples', 'zits', 'breakouts', 'pimple marks'],
+      'dandruff': ['dandruff', 'flaky scalp', 'itchy scalp', 'dry scalp']
+    };
+    
+    for (const [symptomKey, variations] of Object.entries(symptomAliases)) {
+      const hasMatch = variations.some(variation => symptomsLower.includes(variation));
+      if (hasMatch && symptomDB[symptomKey]) {
+        matchedSymptoms.push(symptomKey);
+        medicines.push(...symptomDB[symptomKey]);
       }
     }
 
@@ -148,17 +231,42 @@ const HealthChatbot = () => {
     );
 
     let advice = '';
+    
     if (matchedSymptoms.length > 0) {
-      advice = `Based on your symptoms (${matchedSymptoms.join(', ')}), here are some over-the-counter medicines that may help. However, if symptoms persist or worsen, please consult a healthcare professional.`;
+      // Check if symptoms require doctor consultation
+      const seriousIndicators = [
+        'chest pain', 'difficulty breathing', 'severe bleeding', 'high fever',
+        'unconscious', 'seizure', 'confusion', 'stroke symptoms'
+      ];
+      
+      const hasSerious = seriousIndicators.some(s => symptomsLower.includes(s));
+      
+      const persistentIndicators = [
+        'days', 'weeks', 'persistent', 'chronic', 'recurring', 'constant'
+      ];
+      
+      const isPersistent = persistentIndicators.some(s => symptomsLower.includes(s));
+      
+      if (hasSerious) {
+        advice = `⚠️ **IMPORTANT: Based on your symptoms (${matchedSymptoms.join(', ')}), you should consult a doctor immediately.** These may indicate a serious condition requiring medical evaluation.
+        
+In the meantime, here are some over-the-counter medicines that may provide temporary relief:`;
+      } else if (isPersistent) {
+        advice = `🩺 **RECOMMENDATION: Since your symptoms have been persistent, it's advisable to consult a doctor** to rule out underlying conditions and get proper treatment.
+        
+Here are some over-the-counter medicines that may help in the meantime:`;
+      } else {
+        advice = `💊 **Based on your symptoms (${matchedSymptoms.join(', ')}), here are some over-the-counter medicines that may help:**`;
+      }
     } else {
-      advice = 'I couldn\'t identify specific symptoms from your description. Please describe your symptoms more clearly (e.g., "headache", "fever", "cough"), or consider consulting a healthcare professional for proper diagnosis.';
+      advice = 'I couldn\'t identify specific symptoms from your description. Please describe your symptoms more clearly (e.g., "I have cough", "headache", "fever", "cold"), or consider consulting a healthcare professional for proper diagnosis.';
     }
 
     // Check for serious symptoms
     const seriousSymptoms = ['chest pain', 'difficulty breathing', 'severe bleeding', 'unconscious', 'seizure'];
     const hasSerious = seriousSymptoms.some(s => symptomsLower.includes(s));
     if (hasSerious) {
-      advice = '⚠️ URGENT: Your symptoms may require immediate medical attention. Please visit the nearest emergency room or call emergency services immediately.';
+      advice = '⚠️ **URGENT: Your symptoms may require immediate medical attention. Please visit the nearest emergency room or call emergency services immediately.**';
     }
 
     return {
@@ -276,18 +384,51 @@ const HealthChatbot = () => {
 
     try {
       let botResponse;
-
-      if (chatMode === 'symptoms') {
-        const analysis = await analyzeSymptomsForMedicine(inputMessage);
-        
-        botResponse = {
-          type: 'bot',
-          content: analysis.advice || 'Based on your symptoms, here are some suggestions:',
-          timestamp: new Date(),
-          medicines: analysis.medicines || [],
-          disclaimer: true
-        };
-      } else if (chatMode === 'doctor-advice') {
+      const messageLower = inputMessage.toLowerCase();
+      
+      // Intelligent Intent Detection - Auto-detect what the user is asking
+      
+      // 1. Check for "Should I consult a doctor?" type questions
+      const consultPatterns = [
+        'should i consult', 'should i see a doctor', 'do i need a doctor',
+        'should i go to hospital', 'need medical attention', 'see a physician',
+        'consult a doctor', 'visit doctor', 'medical help', 'doctor appointment'
+      ];
+      
+      const isConsultQuestion = consultPatterns.some(pattern => 
+        messageLower.includes(pattern) || 
+        messageLower.includes('doctor') || 
+        messageLower.includes('hospital') ||
+        messageLower.includes('physician')
+      );
+      
+      // 2. Check for medicine/medication questions
+      const medicinePatterns = [
+        'what medicine', 'which medicine', 'medicine for', 'medication for',
+        'tablet for', 'drug for', 'take for', 'prescription', 'over the counter'
+      ];
+      
+      const isMedicineQuestion = medicinePatterns.some(pattern =>
+        messageLower.includes(pattern) ||
+        (messageLower.includes('medicine') && (messageLower.includes('take') || messageLower.includes('use')))
+      );
+      
+      // 3. Check for symptom description (contains body parts or common symptoms)
+      const symptomKeywords = [
+        'pain', 'ache', 'hurt', 'feeling', 'symptom', 'suffering', 'have ',
+        'headache', 'fever', 'cough', 'cold', 'throat', 'stomach', 'nausea',
+        'vomiting', 'diarrhea', 'tired', 'weak', 'dizzy', 'swelling', 'rash'
+      ];
+      
+      const isSymptomDescription = symptomKeywords.some(keyword =>
+        messageLower.includes(keyword)
+      );
+      
+      // Smart Response Logic based on detected intent
+      
+      if (isConsultQuestion && isSymptomDescription) {
+        // User is asking about consulting doctor AND describing symptoms
+        console.log('🤖 Detected: Doctor consultation question with symptoms');
         const analysis = await analyzeDoctorNeed(inputMessage);
         
         let urgencyColor = 'yellow';
@@ -313,8 +454,49 @@ const HealthChatbot = () => {
           },
           disclaimer: true
         };
+      } else if (isMedicineQuestion || (isSymptomDescription && messageLower.includes('medicine'))) {
+        // User is asking about medicines
+        console.log('🤖 Detected: Medicine question');
+        const analysis = await analyzeSymptomsForMedicine(inputMessage);
+        
+        botResponse = {
+          type: 'bot',
+          content: analysis.advice || 'Based on your symptoms, here are some suggestions:',
+          timestamp: new Date(),
+          medicines: analysis.medicines || [],
+          disclaimer: true
+        };
+      } else if (isSymptomDescription) {
+        // User is describing symptoms - provide medicine suggestions
+        console.log('🤖 Detected: Symptom description');
+        const analysis = await analyzeSymptomsForMedicine(inputMessage);
+        
+        botResponse = {
+          type: 'bot',
+          content: analysis.advice || 'Based on your symptoms, here are some suggestions:',
+          timestamp: new Date(),
+          medicines: analysis.medicines || [],
+          disclaimer: true
+        };
+      } else if (isConsultQuestion) {
+        // General question about consulting doctor without specific symptoms
+        console.log('🤖 Detected: General doctor consultation question');
+        botResponse = {
+          type: 'bot',
+          content: `That's a great question! To give you the best advice about whether you should consult a doctor, could you tell me more about what you're experiencing? 
+
+For example, you could share:
+• What symptoms are you having? (e.g., fever, pain, cough)
+• How long have you had these symptoms?
+• How severe are they?
+
+This will help me assess whether you need medical attention. 🩺`,
+          timestamp: new Date(),
+          disclaimer: true
+        };
       } else {
         // General health query
+        console.log('🤖 Detected: General health query');
         try {
           const response = await axios.post('/api/chatbot/general-query', {
             query: inputMessage,

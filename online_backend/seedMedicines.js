@@ -214,6 +214,48 @@ const sampleMedicines = [
     tags: ['cough', 'cold', 'respiratory'],
     rating: 4.2,
     reviewCount: 90
+  },
+  {
+    name: 'Tr Bellidopnas',
+    manufacturer: 'Herbal Remedies',
+    category: 'Tincture',
+    description: 'Belladonna tincture for various ailments',
+    strength: '15ml',
+    price: 185.00,
+    mrp: 220.00,
+    discount: 16,
+    inStock: true,
+    stockQuantity: 75,
+    prescriptionRequired: true,
+    uses: 'Used for pain relief and as an antispasmodic',
+    sideEffects: 'Dry mouth, blurred vision, dizziness',
+    dosage: 'As directed by physician',
+    warnings: 'Use only under medical supervision',
+    activeIngredients: ['Belladonna Alkaloids'],
+    tags: ['tincture', 'belladonna', 'pain relief'],
+    rating: 4.3,
+    reviewCount: 45
+  },
+  {
+    name: 'Amphotericin B',
+    manufacturer: 'AntiFungal Pharma',
+    category: 'Injection',
+    description: 'Antifungal medication for serious infections',
+    strength: '50mg/10ml',
+    price: 2500.00,
+    mrp: 3000.00,
+    discount: 17,
+    inStock: true,
+    stockQuantity: 50,
+    prescriptionRequired: true,
+    uses: 'Treatment of severe fungal infections',
+    sideEffects: 'Fever, chills, nausea, kidney problems',
+    dosage: 'As prescribed by doctor',
+    warnings: 'Requires hospital administration',
+    activeIngredients: ['Amphotericin B'],
+    tags: ['antifungal', 'injection', 'serious infections'],
+    rating: 4.7,
+    reviewCount: 30
   }
 ];
 

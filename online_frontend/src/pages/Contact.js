@@ -73,9 +73,9 @@ function Contact() {
               <div className="bg-gray-50 border rounded-lg p-6">
                 <h3 className="text-sm font-semibold text-gray-900">Follow</h3>
                 <div className="mt-3 flex gap-3 text-sm">
-                  <a className="text-blue-700" href="#">Facebook</a>
-                  <a className="text-blue-700" href="#">Twitter</a>
-                  <a className="text-blue-700" href="#">Instagram</a>
+                  <button type="button" className="text-blue-700 hover:underline">Facebook</button>
+                  <button type="button" className="text-blue-700 hover:underline">Twitter</button>
+                  <button type="button" className="text-blue-700 hover:underline">Instagram</button>
                 </div>
               </div>
             </aside>

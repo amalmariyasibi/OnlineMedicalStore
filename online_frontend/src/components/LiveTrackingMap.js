@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { updateDeliveryLocation, getDeliveryLocation } from "../firebase";
+import { updateDeliveryLocation } from "../firebase";
 
 // Enhanced Live Tracking Map with GPS tracking and route display
 const LiveTrackingMap = ({ deliveryPersonId, orderId, customerLocation, onClose }) => {
@@ -14,7 +14,6 @@ const LiveTrackingMap = ({ deliveryPersonId, orderId, customerLocation, onClose 
   const [error, setError] = useState("");
   const [tracking, setTracking] = useState(false);
   const [distanceToCustomer, setDistanceToCustomer] = useState(null);
-  const [currentLocation, setCurrentLocation] = useState(null);
   const [estimatedTime, setEstimatedTime] = useState(null);
 
   // Initialize map
@@ -144,7 +143,6 @@ const LiveTrackingMap = ({ deliveryPersonId, orderId, customerLocation, onClose 
           setTracking(true);
 
           const newLocation = { lat: latitude, lng: longitude };
-          setCurrentLocation(newLocation);
 
           if (mapInstanceRef.current && deliveryMarkerRef.current) {
             const latlng = [latitude, longitude];

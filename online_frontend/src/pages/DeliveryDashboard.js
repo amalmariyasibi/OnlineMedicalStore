@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser, getUserData, getDeliveryOrders, updateOrderStatus, requestAndSaveFcmToken, onForegroundNotification } from "../firebase";
 import LiveTrackingMap from "../components/LiveTrackingMap";
@@ -21,7 +21,7 @@ function DeliveryDashboard() {
   const [ratingLoading, setRatingLoading] = useState(false);
 
   // Fetch user data and orders
-  const fetchUserAndOrders = async () => {
+  const fetchUserAndOrders = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -89,11 +89,11 @@ function DeliveryDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
 
   useEffect(() => {
     fetchUserAndOrders();
-  }, [navigate]);
+  }, [navigate, fetchUserAndOrders]);
 
   // Load basic feedback summary for delivered orders
   useEffect(() => {
@@ -107,15 +107,32 @@ function DeliveryDashboard() {
       try {
         setRatingLoading(true);
         const baseUrl = process.env.REACT_APP_API_URL || '';
+        const token = localStorage.getItem('token');
         const query = encodeURIComponent(deliveredOrderIds.join(','));
-        const resp = await fetch(`${baseUrl}/api/feedback/delivery/summary?orderIds=${query}`);
+        
+        // Only fetch if token exists
+        if (!token) {
+          setRatingSummary(null);
+          return;
+        }
+        
+        const resp = await fetch(`${baseUrl}/api/feedback/delivery/summary?orderIds=${query}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
         if (!resp.ok) {
+          if (resp.status === 401) {
+            console.warn('Auth token expired for feedback loading');
+          }
           setRatingSummary(null);
           return;
         }
         const data = await resp.json();
         setRatingSummary(data);
       } catch (e) {
+        console.error('Error loading feedback summary:', e);
         setRatingSummary(null);
       } finally {
         setRatingLoading(false);
@@ -171,6 +188,43 @@ function DeliveryDashboard() {
     try {
       setUpdatingOrder(true);
       
+      // If status is "Out for Delivery", send OTP email to customer first
+      if (newStatus === "Out for Delivery") {
+        try {
+          const order = orders.find(o => o.id === orderId);
+          if (order && order.userId && order.userEmail) {
+            // Send OTP email to customer
+            const baseUrl = process.env.REACT_APP_API_URL || '';
+            const token = localStorage.getItem('token');
+            
+            if (token) {
+              const response = await fetch(`${baseUrl}/api/notifications/send-delivery-otp`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                  order: order,
+                  user: { email: order.userEmail }
+                })
+              });
+              
+              if (response.ok) {
+                console.log('OTP email sent to customer');
+              } else if (response.status === 401) {
+                console.warn('Auth token expired, cannot send OTP email');
+              } else {
+                console.warn('Failed to send OTP email');
+              }
+            }
+          }
+        } catch (emailError) {
+          console.error('Error sending OTP email:', emailError);
+          // Continue with status update even if email fails
+        }
+      }
+      
       // If status is "Delivered", redirect to OTP Verification tab
       if (newStatus === "Delivered") {
         const order = orders.find(o => o.id === orderId);
@@ -206,6 +260,66 @@ function DeliveryDashboard() {
   };
   
   // Handle OTP verification and delivery confirmation (removed - use OTP Verification tab instead)
+  
+  // Handle sending OTP when Verify Delivery is clicked
+  const handleSendOTP = async (orderId) => {
+    try {
+      const order = orders.find(o => o.id === orderId);
+      if (!order || !order.userEmail) {
+        setError('Customer email not found for this order');
+        return;
+      }
+      
+      setUpdatingOrder(true);
+      
+      // Send OTP email to customer
+      const baseUrl = process.env.REACT_APP_API_URL || '';
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        setError('Authentication token not found. Please log in again.');
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
+        return;
+      }
+      
+      const response = await fetch(`${baseUrl}/api/notifications/send-delivery-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          order: order,
+          user: { email: order.userEmail }
+        })
+      });
+      
+      if (response.ok) {
+        setSuccess(`6-digit OTP sent to customer's email (${order.userEmail}). Please ask the customer for the OTP.`);
+        // Navigate to OTP verification tab
+        setActiveTab('otp');
+        setSelectedForOtp(order);
+      } else if (response.status === 401) {
+        setError('Session expired. Please log in again.');
+        localStorage.removeItem('token');
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
+      } else {
+        const errorData = await response.json();
+        setError('Failed to send OTP: ' + (errorData.message || 'Unknown error'));
+      }
+    } catch (emailError) {
+      console.error('Error sending OTP email:', emailError);
+      setError('Error sending OTP: ' + emailError.message);
+    } finally {
+      setUpdatingOrder(false);
+      setTimeout(() => setSuccess(''), 5000);
+      setTimeout(() => setError(''), 5000);
+    }
+  };
 
   if (loading) {
     return (
@@ -216,13 +330,6 @@ function DeliveryDashboard() {
   }
 
   // Calculate metrics
-  const pendingDeliveries = orders.filter(order => order.status === 'Ready for Delivery').length;
-  const completedDeliveries = orders.filter(order => order.status === 'Delivered').length;
-  const todaysDeliveries = orders.filter(order => {
-    const today = new Date().toISOString().split('T')[0];
-    return order.date === today;
-  }).length;
-
   const totalOrders = orders.length;
   const assignedCount = orders.filter(o => o.status === 'Approved').length;
   const pickedCount = orders.filter(o => o.status === 'Picked Up').length;
@@ -558,7 +665,7 @@ function DeliveryDashboard() {
                       {order.status === 'Out for Delivery' && (
                         <>
                           <button
-                            onClick={() => handleUpdateStatus(order.id, 'Delivered')}
+                            onClick={() => handleSendOTP(order.id)}
                             disabled={updatingOrder}
                             className="px-3 py-2 text-sm rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
                           >Verify Delivery</button>

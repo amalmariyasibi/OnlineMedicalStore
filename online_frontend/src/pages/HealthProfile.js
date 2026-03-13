@@ -71,12 +71,12 @@ const calculateRefillReminders = (orders) => {
 function HealthProfile() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refillRecommendations, setRefillRecommendations] = useState([]);
   const [activeTab, setActiveTab] = useState("metrics");
   const [userDetails, setUserDetails] = useState(null);
   const [loadingUserDetails, setLoadingUserDetails] = useState(true);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refillRecommendations, setRefillRecommendations] = useState([]);
   const [showSchedulePanel, setShowSchedulePanel] = useState(false);
   const [showDietPanel, setShowDietPanel] = useState(false);
   const [showEditPanel, setShowEditPanel] = useState(false);

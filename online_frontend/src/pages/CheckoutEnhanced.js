@@ -206,7 +206,7 @@ function Checkout() {
     };
 
     prefillAddressFromLastOrder();
-  }, [currentUser]);
+  }, [currentUser, deliveryAddress.address, deliveryAddress.alternatePhone, deliveryAddress.city, deliveryAddress.fullName, deliveryAddress.landmark, deliveryAddress.locality, deliveryAddress.mobile, deliveryAddress.pincode, deliveryAddress.state]);
 
   // Persist address to localStorage whenever the user edits it
   useEffect(() => {
@@ -453,8 +453,14 @@ function Checkout() {
           description: 'Medicine Purchase',
           order_id: orderResponse.order.id,
           handler: async (response) => {
-            console.log('Payment successful, handling response:', response);
+            console.log('=== RAZORPAY PAYMENT SUCCESSFUL ===');
+            console.log('Payment response:', response);
+            console.log('Razorpay Payment ID:', response.razorpay_payment_id);
+            console.log('Razorpay Order ID:', response.razorpay_order_id);
+            console.log('Razorpay Signature:', response.razorpay_signature);
+            console.log('Calling verifyPaymentAndCreateOrder...');
             await verifyPaymentAndCreateOrder(response, orderResponse.order);
+            console.log('verifyPaymentAndCreateOrder completed');
           },
           prefill: {
             name: deliveryAddress.fullName,
@@ -514,12 +520,14 @@ function Checkout() {
   };
 
   const verifyPaymentAndCreateOrder = async (paymentResponse, razorpayOrder) => {
+    console.log('=== verifyPaymentAndCreateOrder STARTED ===');
+    console.log('Payment response:', paymentResponse);
+    console.log('Razorpay order:', razorpayOrder);
+    
     try {
-      console.log('Verifying payment with backend...', {
-        orderId: paymentResponse.razorpay_order_id,
-        paymentId: paymentResponse.razorpay_payment_id
-      });
-      console.log('Payment response to verify:', paymentResponse);
+      console.log('Verifying payment with backend...');
+      console.log('Order ID:', paymentResponse.razorpay_order_id);
+      console.log('Payment ID:', paymentResponse.razorpay_payment_id);
       
       // Verify payment with backend
       // When REACT_APP_API_URL is not set, we're using the proxy, so use relative path
@@ -622,14 +630,33 @@ function Checkout() {
   };
 
   const clearCartAndNavigate = (orderId) => {
+    console.log('=== clearCartAndNavigate called ===');
+    console.log('Order ID:', orderId);
+    console.log('Order ID type:', typeof orderId);
+    console.log('Order ID is empty?', !orderId);
+    
+    if (!orderId) {
+      console.error('ERROR: No orderId provided to clearCartAndNavigate!');
+      alert('Error: Order was created but order ID is missing. Please contact support.');
+      setLoading(false);
+      return;
+    }
+    
     // Clear cart if not buy now
     if (!buyNowItem) {
       const cartKey = currentUser ? `cart_${currentUser.uid}` : 'cart_guest';
+      console.log('Clearing cart with key:', cartKey);
       localStorage.removeItem(cartKey);
       window.dispatchEvent(new Event('cartUpdated'));
     }
     
-    navigate(`/order-confirmation/${orderId}`);
+    const destinationUrl = `/order-confirmation/${orderId}`;
+    console.log('Navigating to:', destinationUrl);
+    console.log('Navigation starting...');
+    
+    navigate(destinationUrl);
+    
+    console.log('Navigation completed');
   };
 
   if (cartItems.length === 0) {

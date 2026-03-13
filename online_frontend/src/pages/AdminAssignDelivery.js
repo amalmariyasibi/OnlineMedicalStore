@@ -13,7 +13,6 @@ function AdminAssignDelivery() {
   const navigate = useNavigate();
   const { orderId } = useParams();
 
-  const [currentUser, setCurrentUser] = useState(null);
   const [order, setOrder] = useState(null);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,7 +33,6 @@ function AdminAssignDelivery() {
           return;
         }
         const user = getCurrentUser();
-        setCurrentUser(user);
         const userDataRes = await getUserData(user.uid);
         if (!userDataRes.success || userDataRes.data.role !== "admin") {
           navigate("/unauthorized");

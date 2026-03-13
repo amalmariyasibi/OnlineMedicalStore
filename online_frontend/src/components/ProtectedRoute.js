@@ -19,13 +19,21 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   // ✅ Fetch user role and check authorization
   useEffect(() => {
     const fetchUserRole = async () => {
+      console.log('ProtectedRoute - fetchUserRole started');
+      console.log('ProtectedRoute - currentUser:', currentUser);
+      console.log('ProtectedRoute - allowedRoles:', allowedRoles);
+      
       if (!currentUser) {
+        console.log('ProtectedRoute - No currentUser, setting loading false');
         setLoading(false);
         return;
       }
 
       try {
+        console.log('ProtectedRoute - Fetching user data for uid:', currentUser.uid);
         const res = await getUserData(currentUser.uid);
+        console.log('ProtectedRoute - User data fetched:', res);
+        
         if (res.success && res.data) {
           // Get role and normalize it
           let role = res.data.role ? res.data.role.toString().trim().toLowerCase() : "";
@@ -39,31 +47,33 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
           // Role is used directly below, no need to store in state
 
           // ✅ Debugging statements
-          console.log("Fetched user role:", res.data.role);
-          console.log("Normalized role:", role);
+          console.log("ProtectedRoute - Fetched user role:", res.data.role);
+          console.log("ProtectedRoute - Normalized role:", role);
 
           const allowed = allowedRoles.map(r => r.toString().trim().toLowerCase());
-          console.log("Allowed roles:", allowed);
-          console.log("Current path requires roles:", allowed.length > 0 ? allowed : "any authenticated user");
-          console.log("User has role:", role);
+          console.log("ProtectedRoute - Allowed roles:", allowed);
+          console.log("ProtectedRoute - Current path requires roles:", allowed.length > 0 ? allowed : "any authenticated user");
+          console.log("ProtectedRoute - User has role:", role);
           
           const isAuthorized = allowed.length === 0 || allowed.includes(role);
-          console.log("Is user authorized for this route?", isAuthorized);
+          console.log("ProtectedRoute - Is user authorized for this route?", isAuthorized);
           
           if (isAuthorized) {
+            console.log('ProtectedRoute - Setting authorized to true');
             setAuthorized(true);
           } else {
-            console.warn("User not authorized. Has role:", role, "Needs one of:", allowed);
+            console.warn("ProtectedRoute - User not authorized. Has role:", role, "Needs one of:", allowed);
             setAuthorized(false);
           }
         } else {
-          console.error("Error fetching user data:", res.error);
+          console.error("ProtectedRoute - Error fetching user data:", res.error);
           setAuthorized(false);
         }
       } catch (error) {
-        console.error("Unexpected error fetching user role:", error);
+        console.error("ProtectedRoute - Unexpected error fetching user role:", error);
         setAuthorized(false);
       } finally {
+        console.log('ProtectedRoute - Setting loading to false');
         setLoading(false);
       }
     };

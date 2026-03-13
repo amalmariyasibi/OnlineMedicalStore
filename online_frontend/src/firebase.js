@@ -53,7 +53,7 @@ const initMessaging = async () => {
     messagingInstance = getMessaging();
     // Register SW if not already
     if ('serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      await navigator.serviceWorker.register('/firebase-messaging-sw.js');
       // associate messaging with this SW
       // getMessaging() in v9 automatically uses default SW; explicit useServiceWorker not needed
     }
@@ -1779,23 +1779,35 @@ export const createOrder = async (orderData) => {
           const userData = userSnap.data();
           
           // Call the backend notification API
-          const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4321'}/api/notifications/order-confirmation`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify({
-              order: {
-                ...orderWithTimestamps,
-                orderId
-              },
-              user: userData
-            })
-          });
+          const authToken = localStorage.getItem('token');
           
-          const notificationResult = await response.json();
-          console.log('Order confirmation notification result:', notificationResult);
+          if (authToken) {
+            const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4321'}/api/notifications/order-confirmation`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+              },
+              body: JSON.stringify({
+                order: {
+                  ...orderWithTimestamps,
+                  orderId
+                },
+                user: userData
+              })
+            });
+            
+            if (response.ok) {
+              const notificationResult = await response.json();
+              console.log('Order confirmation notification result:', notificationResult);
+            } else if (response.status === 401) {
+              console.warn('Auth token expired or invalid, skipping notification');
+            } else {
+              console.warn('Failed to send order confirmation notification:', response.status);
+            }
+          } else {
+            console.log('No auth token found, skipping order confirmation notification');
+          }
         }
       }
     } catch (notificationError) {

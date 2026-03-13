@@ -7,6 +7,9 @@ function Products({ title = "Products" }) {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   
+  // Check if current user is admin
+  const isAdmin = currentUser?.role === 'admin';
+  
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false); // Start with false
   const [error, setError] = useState("");
@@ -137,7 +140,7 @@ function Products({ title = "Products" }) {
                 
                 <div className="mt-2">
                   <span className="text-xs text-green-600">In Stock ({product.stockQuantity})</span>
-                  {currentUser && (
+                  {currentUser && !isAdmin && (
                     <div className="mt-2">
                       <div className="space-y-2">
                         <button

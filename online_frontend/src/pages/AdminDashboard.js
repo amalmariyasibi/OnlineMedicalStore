@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { 
   getCurrentUser, 
@@ -13,14 +13,11 @@ import {
   assignDeliveryPerson,
   getAllPrescriptions,
   updatePrescriptionStatus,
-  deletePrescription,
   getSystemSettings,
   updateSystemSettings,
   resetSystemSettings
 } from "../firebase";
 import { seedOrders } from "../seedOrders";
-import AddDummyProducts from "../components/AddDummyProducts";
-import LiveCartActivity from "../components/LiveCartActivity";
 import AdminProducts from "./AdminProducts";
 
 function AdminDashboard() {
@@ -70,6 +67,123 @@ function AdminDashboard() {
   const [settingsChanged, setSettingsChanged] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
+  // ===== UTILITY FUNCTIONS - MUST BE DEFINED BEFORE USEEFFECT =====
+  
+  // Wrap loadOrders in useCallback to prevent recreation on every render
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Apply status filter if not "all"
+      const filters = statusFilter !== "all" ? { status: statusFilter } : {};
+      const result = await getAllOrders(filters);
+      
+      if (result.success) {
+        setOrders(result.orders);
+      } else {
+        setError(result.error || "Failed to load orders");
+      }
+    } catch (err) {
+      setError(err.message || "An error occurred while loading orders");
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter]);
+
+  // Load all prescriptions
+  const loadPrescriptions = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Apply status filter if not "all"
+      const filters = prescriptionStatusFilter !== "all" ? { status: prescriptionStatusFilter } : {};
+      const result = await getAllPrescriptions(filters);
+      
+      if (result.success) {
+        setPrescriptions(result.prescriptions);
+      } else {
+        setError(result.error || "Failed to load prescriptions");
+      }
+    } catch (err) {
+      setError(err.message || "An error occurred while loading prescriptions");
+    } finally {
+      setLoading(false);
+    }
+  }, [prescriptionStatusFilter]);
+  
+  // Generate report data based on type and period
+  const generateReport = useCallback(async () => {
+    setLoadingReport(true);
+    setError("");
+    
+    try {
+      // In a real application, this would fetch data from the backend
+      // For now, we'll generate mock data
+      
+      // Get date range based on period
+      const today = new Date();
+      let startDate = new Date();
+      
+      switch (reportPeriod) {
+        case "week":
+          startDate.setDate(today.getDate() - 7);
+          break;
+        case "month":
+          startDate.setMonth(today.getMonth() - 1);
+          break;
+        case "quarter":
+          startDate.setMonth(today.getMonth() - 3);
+          break;
+        case "year":
+          startDate.setFullYear(today.getFullYear() - 1);
+          break;
+        default:
+          startDate.setDate(today.getDate() - 7);
+      }
+      
+      // Filter orders based on date range and report type
+      const filteredOrders = orders.filter(order => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate >= startDate && orderDate <= today;
+      });
+      
+      // Generate report data based on type
+      let reportData = [];
+      
+      switch (reportType) {
+        case "sales":
+          // Calculate total sales
+          const totalSales = filteredOrders.reduce((sum, order) => sum + parseFloat(order.totalPrice || 0), 0);
+          reportData = [{ name: "Total Sales", value: totalSales.toFixed(2) }];
+          break;
+        case "orders":
+          // Count orders by status
+          const statusCount = filteredOrders.reduce((acc, order) => {
+            acc[order.status] = (acc[order.status] || 0) + 1;
+            return acc;
+          }, {});
+          reportData = Object.entries(statusCount).map(([status, count]) => ({
+            name: status,
+            value: count
+          }));
+          break;
+        case "customers":
+          // Count unique customers
+          const uniqueCustomers = [...new Set(filteredOrders.map(order => order.userId))];
+          reportData = [{ name: "Unique Customers", value: uniqueCustomers.length }];
+          break;
+        default:
+          reportData = [];
+      }
+      
+      setReportData(reportData);
+    } catch (err) {
+      setError(err.message || "An error occurred while generating report");
+    } finally {
+      setLoadingReport(false);
+    }
+  }, [reportPeriod, reportType, orders]);
+
+  // ===== END UTILITY FUNCTIONS =====
+
   useEffect(() => {
     // Check if user is authenticated and is an admin
     const checkAuth = async () => {
@@ -111,35 +225,28 @@ function AdminDashboard() {
     };
     
     checkAuth();
-  }, [navigate, location.search]);
-  
-  // Load orders when status filter changes
-  useEffect(() => {
-    if (currentUser) {
-      loadOrders();
-    }
-  }, [statusFilter]);
+  }, [navigate, location.search, loadOrders]);
   
   // Load prescriptions when prescription status filter changes
   useEffect(() => {
     if (currentUser) {
       loadPrescriptions();
     }
-  }, [prescriptionStatusFilter]);
+  }, [prescriptionStatusFilter, currentUser, loadPrescriptions]);
   
   // Generate report when report type or period changes
   useEffect(() => {
     if (currentUser && activeTab === "reports") {
       generateReport();
     }
-  }, [reportType, reportPeriod, activeTab]);
+  }, [reportType, reportPeriod, activeTab, currentUser, generateReport]);
   
   // Load settings when settings tab is selected
   useEffect(() => {
     if (currentUser && activeTab === "settings") {
       loadSettings();
     }
-  }, [activeTab]);
+  }, [activeTab, currentUser]);
 
   // Function to get user data (role, etc.)
   const checkUserRole = async (userId) => {
@@ -162,26 +269,6 @@ function AdminDashboard() {
       }
     } catch (err) {
       setError(err.message || "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // Load all orders
-  const loadOrders = async () => {
-    setLoading(true);
-    try {
-      // Apply status filter if not "all"
-      const filters = statusFilter !== "all" ? { status: statusFilter } : {};
-      const result = await getAllOrders(filters);
-      
-      if (result.success) {
-        setOrders(result.orders);
-      } else {
-        setError(result.error || "Failed to load orders");
-      }
-    } catch (err) {
-      setError(err.message || "An error occurred while loading orders");
     } finally {
       setLoading(false);
     }
@@ -215,7 +302,7 @@ function AdminDashboard() {
         unsubscribe();
       }
     };
-  }, [statusFilter]);
+  }, [statusFilter, ordersUnsubscribe]);
   
   // Handle order status update
   const handleOrderStatusUpdate = async () => {
@@ -279,26 +366,6 @@ function AdminDashboard() {
       setError(err.message || "An error occurred while assigning delivery person");
     } finally {
       setUpdatingOrder(false);
-    }
-  };
-  
-  // Load all prescriptions
-  const loadPrescriptions = async () => {
-    setLoading(true);
-    try {
-      // Apply status filter if not "all"
-      const filters = prescriptionStatusFilter !== "all" ? { status: prescriptionStatusFilter } : {};
-      const result = await getAllPrescriptions(filters);
-      
-      if (result.success) {
-        setPrescriptions(result.prescriptions);
-      } else {
-        setError(result.error || "Failed to load prescriptions");
-      }
-    } catch (err) {
-      setError(err.message || "An error occurred while loading prescriptions");
-    } finally {
-      setLoading(false);
     }
   };
   
@@ -419,132 +486,6 @@ function AdminDashboard() {
       [field]: value
     }));
     setSettingsChanged(true);
-  };
-  
-  // Generate report data based on type and period
-  const generateReport = async () => {
-    setLoadingReport(true);
-    setError("");
-    
-    try {
-      // In a real application, this would fetch data from the backend
-      // For now, we'll generate mock data
-      
-      // Get date range based on period
-      const today = new Date();
-      let startDate = new Date();
-      
-      switch (reportPeriod) {
-        case "week":
-          startDate.setDate(today.getDate() - 7);
-          break;
-        case "month":
-          startDate.setMonth(today.getMonth() - 1);
-          break;
-        case "quarter":
-          startDate.setMonth(today.getMonth() - 3);
-          break;
-        case "year":
-          startDate.setFullYear(today.getFullYear() - 1);
-          break;
-        default:
-          startDate.setMonth(today.getMonth() - 1); // Default to month
-      }
-      
-      // Generate mock data based on report type
-      let data = {};
-      
-      switch (reportType) {
-        case "sales":
-          // Generate daily sales data
-          const salesData = [];
-          let currentDate = new Date(startDate);
-          
-          while (currentDate <= today) {
-            // Random sales amount between 1000 and 10000
-            const amount = Math.floor(Math.random() * 9000) + 1000;
-            salesData.push({
-              date: new Date(currentDate),
-              amount: amount
-            });
-            currentDate.setDate(currentDate.getDate() + 1);
-          }
-          
-          // Calculate total sales
-          const totalSales = salesData.reduce((sum, item) => sum + item.amount, 0);
-          
-          // Calculate average daily sales
-          const avgDailySales = totalSales / salesData.length;
-          
-          data = {
-            salesData,
-            totalSales,
-            avgDailySales,
-            currency: "₹"
-          };
-          break;
-          
-        case "orders":
-          // Generate order status data
-          const orderStatusData = [
-            { status: "pending", count: Math.floor(Math.random() * 20) + 5 },
-            { status: "processing", count: Math.floor(Math.random() * 15) + 3 },
-            { status: "shipped", count: Math.floor(Math.random() * 25) + 10 },
-            { status: "delivered", count: Math.floor(Math.random() * 50) + 20 },
-            { status: "cancelled", count: Math.floor(Math.random() * 10) + 1 }
-          ];
-          
-          // Calculate total orders
-          const totalOrders = orderStatusData.reduce((sum, item) => sum + item.count, 0);
-          
-          data = {
-            orderStatusData,
-            totalOrders
-          };
-          break;
-          
-        case "products":
-          // Generate top selling products data
-          const topProducts = [
-            { name: "Paracetamol", sales: Math.floor(Math.random() * 100) + 50 },
-            { name: "Aspirin", sales: Math.floor(Math.random() * 90) + 40 },
-            { name: "Vitamin C", sales: Math.floor(Math.random() * 80) + 30 },
-            { name: "Cough Syrup", sales: Math.floor(Math.random() * 70) + 20 },
-            { name: "Antiseptic Cream", sales: Math.floor(Math.random() * 60) + 10 }
-          ];
-          
-          // Sort by sales in descending order
-          topProducts.sort((a, b) => b.sales - a.sales);
-          
-          data = {
-            topProducts
-          };
-          break;
-          
-        case "customers":
-          // Generate customer activity data
-          const customerData = [
-            { metric: "New Customers", count: Math.floor(Math.random() * 50) + 10 },
-            { metric: "Returning Customers", count: Math.floor(Math.random() * 100) + 50 },
-            { metric: "Average Order Value", value: Math.floor(Math.random() * 1000) + 500 },
-            { metric: "Customer Retention Rate", percentage: Math.floor(Math.random() * 30) + 70 }
-          ];
-          
-          data = {
-            customerData
-          };
-          break;
-          
-        default:
-          data = { error: "Invalid report type" };
-      }
-      
-      setReportData(data);
-    } catch (err) {
-      setError(err.message || "An error occurred while generating the report");
-    } finally {
-      setLoadingReport(false);
-    }
   };
   
   // Handle seeding sample orders
@@ -1128,7 +1069,7 @@ function AdminDashboard() {
                                  "Guest User"}
                               </div>
                               <div className="text-sm text-gray-500">
-                                {order.email || (order.shippingAddress && order.shippingAddress.email) || "No email"}
+                                {order.userEmail || order.email || (order.shippingAddress && order.shippingAddress.email) || "No email"}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">

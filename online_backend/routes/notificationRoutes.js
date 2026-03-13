@@ -43,6 +43,14 @@ router.post(
   notificationController.generateDeliveryOTP
 );
 
+// Route to send delivery OTP email to customer
+router.post(
+  '/send-delivery-otp',
+  protect,
+  authorize('admin', 'delivery'),
+  notificationController.sendDeliveryOtp
+);
+
 // Route to send push notification (admin only)
 router.post(
   '/push',

@@ -139,6 +139,7 @@ const processPrescription = async (req, res) => {
       
       medicinesSnapshot.forEach(doc => {
         const data = doc.data();
+        console.log('Medicine from Firebase:', data.name, 'Image URL:', data.imageUrl);
         databaseMedicines.push({
           id: doc.id,
           name: data.name || '',
@@ -148,6 +149,7 @@ const processPrescription = async (req, res) => {
           stockQuantity: data.stockQuantity || 0,
           category: data.category || '',
           requiresPrescription: data.requiresPrescription || false,
+          imageUrl: data.imageUrl || '', // Explicitly include imageUrl
           ...data
         });
       });

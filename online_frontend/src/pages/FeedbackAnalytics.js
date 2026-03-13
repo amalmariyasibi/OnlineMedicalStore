@@ -15,7 +15,7 @@ const FeedbackAnalytics = () => {
   useEffect(() => {
     fetchAnalytics();
     fetchFeedbacks();
-  }, [filters]);
+  }, [filters, fetchAnalytics, fetchFeedbacks]);
 
   const fetchAnalytics = async () => {
     try {

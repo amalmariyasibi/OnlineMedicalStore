@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../firebaseConfig';
@@ -10,6 +10,14 @@ const UserDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    // Mark component as mounted to prevent state updates on unmounted component
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     // Redirect admin users to the admin dashboard
@@ -27,7 +35,9 @@ const UserDashboard = () => {
     const fetchOrders = async () => {
       try {
         if (!currentUser) {
-          setLoading(false);
+          if (isMountedRef.current) {
+            setLoading(false);
+          }
           return;
         }
 
@@ -38,6 +48,9 @@ const UserDashboard = () => {
         );
 
         const querySnapshot = await getDocs(ordersQuery);
+        
+        if (!isMountedRef.current) return;
+        
         const ordersData = querySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
@@ -46,16 +59,19 @@ const UserDashboard = () => {
 
         // Successfully fetched data (even if empty)
         setOrders(ordersData);
-
         setError(null); // Clear any previous errors
       } catch (err) {
         // Only log the error but don't display it to the user
         // This way the UI will just show an empty state
         console.error('Error fetching orders:', err);
-        setOrders([]);
-        setError(null);
+        if (isMountedRef.current) {
+          setOrders([]);
+          setError(null);
+        }
       } finally {
-        setLoading(false);
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
       }
     };
 
@@ -138,6 +154,20 @@ const UserDashboard = () => {
             <div>
               <h3 className="font-medium">Shop Medicines</h3>
               <p className="text-sm text-gray-500">Browse our medicine catalog</p>
+            </div>
+          </div>
+        </Link>
+        
+        <Link to="/find-medicine" className="bg-white shadow rounded-lg p-6 hover:bg-blue-50 transition duration-200">
+          <div className="flex items-center">
+            <div className="rounded-full bg-cyan-100 p-3 mr-4">
+              <svg className="h-6 w-6 text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-medium">Find Medicine</h3>
+              <p className="text-sm text-gray-500">Search medicines by disease or symptom</p>
             </div>
           </div>
         </Link>

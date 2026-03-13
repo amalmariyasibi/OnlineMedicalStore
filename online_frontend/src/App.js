@@ -13,11 +13,9 @@ import AdminCartMonitor from "./pages/AdminCartMonitor";
 import Unauthorized from "./pages/Unauthorized";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Products from "./pages/ProductsCombined"; // WORKING VERSION - Fixed loading issues
-import ProductsSimple from "./pages/ProductsSimple";
 import ProductDetail from "./pages/ProductDetail";
 import AdminProducts from "./pages/AdminProducts";
 import ProductForm from "./pages/ProductForm";
-import Medicines from "./pages/Medicines";
 import MedicineDetail from "./pages/MedicineDetail";
 import AdminMedicines from "./pages/AdminMedicines";
 import MedicineForm from "./pages/MedicineForm";
@@ -29,7 +27,6 @@ import Orders from './pages/Orders';
 import HealthProfile from './pages/HealthProfile';
 import OrderDetail from "./pages/OrderDetail";
 import UserDashboard from "./pages/user/Dashboard";
-import Notifications from "./pages/Notifications";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import DiseaseMedicineFinder from "./pages/DiseaseMedicineFinder";
@@ -46,8 +43,7 @@ import ChatbotButton from "./components/ChatbotButton";
 import { logoutUser } from "./firebase";
 
 // Navigation component with location awareness
-const Navigation = ({ user, onLogout }) => {
-  const location = useLocation();
+const Navigation = ({ user, onLogout, location }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   return (
@@ -85,26 +81,6 @@ const Navigation = ({ user, onLogout }) => {
                 } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
               >
                 Products
-              </Link>
-              <Link 
-                to="/find-medicine" 
-                className={`${
-                  location.pathname === "/find-medicine"
-                    ? "border-blue-500 text-blue-700"
-                    : "border-transparent text-gray-500 hover:border-blue-500 hover:text-blue-700"
-                } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
-              >
-                Find Medicine
-              </Link>
-              <Link 
-                to="/health-assistant" 
-                className={`${
-                  location.pathname === "/health-assistant"
-                    ? "border-blue-500 text-blue-700"
-                    : "border-transparent text-gray-500 hover:border-blue-500 hover:text-blue-700"
-                } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
-              >
-                AI Health Assistant
               </Link>
               <Link to="/about" className={`${
                 location.pathname === "/about"
@@ -229,20 +205,6 @@ const Navigation = ({ user, onLogout }) => {
           } block pl-3 pr-4 py-2 border-l-4 text-base font-medium`}>
             Products
           </Link>
-          <Link to="/find-medicine" className={`${
-            location.pathname === "/find-medicine"
-              ? "bg-blue-50 border-blue-500 text-blue-700"
-              : "border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
-          } block pl-3 pr-4 py-2 border-l-4 text-base font-medium`}>
-            Find Medicine
-          </Link>
-          <Link to="/health-assistant" className={`${
-            location.pathname === "/health-assistant"
-              ? "bg-blue-50 border-blue-500 text-blue-700"
-              : "border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
-          } block pl-3 pr-4 py-2 border-l-4 text-base font-medium`}>
-            AI Health Assistant
-          </Link>
           <Link to="/about" className={`${
             location.pathname === "/about"
               ? "bg-blue-50 border-blue-500 text-blue-700"
@@ -328,11 +290,10 @@ const Navigation = ({ user, onLogout }) => {
 // Auth wrapper component
 const AuthWrapper = ({ children }) => {
   const { currentUser, loading } = useAuth();
-  const navigate = useNavigate();
 
   const handleLogout = async () => {
     await logoutUser();
-    navigate("/login");
+    window.location.href = '/login';
   };
 
   if (loading) {
@@ -373,14 +334,54 @@ const AuthWrapper = ({ children }) => {
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <CartProvider>
-          <AuthWrapper>
-            <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+    <AuthProvider>
+      <CartProvider>
+        <Router
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true
+          }}
+        >
+          <AppContent />
+        </Router>
+      </CartProvider>
+    </AuthProvider>
+  );
+}
+
+// Main app content component - all hooks must be called here or in child components
+function AppContent() {
+  const { currentUser, loading } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleLogout = async () => {
+    await logoutUser();
+    navigate("/login");
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <svg className="animate-spin h-10 w-10 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      {/* Navigation */}
+      <Navigation user={currentUser} onLogout={handleLogout} location={location} />
+
+      {/* Main content */}
+      <main className="flex-grow">
+        <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/verify-email" element={<EmailVerification />} />
             <Route path="/profile" element={
@@ -572,13 +573,23 @@ function App() {
                </ProtectedRoute>
              } />
             
-            <Route path="/about" element={<About />} />
-            <Route path="/contact" element={<Contact />} />
-            </Routes>
-          </AuthWrapper>
-        </CartProvider>
-      </AuthProvider>
-    </Router>
+        <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
+        </Routes>
+      </main>
+
+      {/* Floating Chatbot Button */}
+      <ChatbotButton />
+
+      {/* Footer */}
+      <footer className="bg-white">
+        <div className="max-w-7xl mx-auto py-6 px-4 overflow-hidden sm:px-6 lg:px-8">
+          <p className="text-center text-base text-gray-500">
+            &copy; 2023 MediHaven. All rights reserved.
+          </p>
+        </div>
+      </footer>
+    </div>
   );
 }
 

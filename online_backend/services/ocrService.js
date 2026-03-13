@@ -129,6 +129,20 @@ const extractStructuredData = (text) => {
   allLines.forEach(line => {
     const cleanedLine = cleanText(line);
     
+    // Skip lines that are clearly not medicine-related
+    const skipPatterns = [
+      /\bif\b.*\bunder\b/i,  // "if under" pattern
+      /\bif\b\s+\w+\s+under\b/i,  // "if something under"
+      /^\s*if\s+/i,  // Lines starting with "if"
+      /\bunder\s+the\b/i,  // "under the"
+    ];
+    
+    const shouldSkip = skipPatterns.some(pattern => pattern.test(cleanedLine));
+    if (shouldSkip) {
+      console.log('Skipping non-medicine line:', cleanedLine);
+      return; // Skip this line entirely
+    }
+    
     // Try to extract medicine name and strength
     medicinePatterns.forEach(pattern => {
       const matches = [...cleanedLine.matchAll(pattern)];
@@ -136,7 +150,15 @@ const extractStructuredData = (text) => {
         const medicineName = match[1]?.trim();
         const strength = match[2]?.trim() || '';
         
-        if (medicineName && medicineName.length > 2) {
+        // Additional validation: reject if it's a common English word/phrase
+        const rejectedWords = [
+          'if', 'under', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for'
+        ];
+        
+        const wordsInName = medicineName.toLowerCase().split(/\s+/);
+        const isRejected = wordsInName.some(word => rejectedWords.includes(word));
+        
+        if (medicineName && medicineName.length > 2 && !isRejected) {
           const dosageMatch = cleanedLine.match(dosagePattern);
           const durationMatch = cleanedLine.match(durationPattern);
           const strengthMatch = cleanedLine.match(strengthPattern);
@@ -159,6 +181,8 @@ const extractStructuredData = (text) => {
       { pattern: /bell[ia]donn?a/i, name: 'belladonna' },
       { pattern: /bell[ia]dopn?as/i, name: 'bellidopnas' },
       { pattern: /ampt[eo]+get/i, name: 'ampteoget' },
+      { pattern: /amphoter[ie]c?i?n/i, name: 'amphotericin' },
+      { pattern: /ampho+[a-z]*b/i, name: 'amphotericin B' },
       { pattern: /parac[ea]tam[oi]l/i, name: 'paracetamol' },
       { pattern: /am[ou]x[io]c[il]+in/i, name: 'amoxicillin' },
       { pattern: /c[ea]tir[ia]z[io]ne/i, name: 'cetirizine' }
@@ -184,17 +208,51 @@ const extractStructuredData = (text) => {
   // If no medicines found, try to extract any words that might be medicine names
   if (medicines.length === 0) {
     const words = correctedText.split(/\s+/);
+    
+    // Strict exclusion list - common English words and phrases
+    const excludedWords = [
+      'if', 'under', 'the', 'and', 'for', 'with', 'this', 'that', 
+      'from', 'have', 'been', 'were', 'will', 'would', 'could', 'should',
+      'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought',
+      'used', 'after', 'before', 'when', 'where', 'which', 'while',
+      'about', 'against', 'between', 'into', 'through', 'during',
+      'without', 'above', 'below', 'up', 'down', 'out', 'off', 'over',
+      'again', 'further', 'then', 'once', 'here', 'there', 'all', 'each',
+      'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such',
+      'only', 'own', 'same', 'than', 'too', 'very', 'just', 'also',
+      'now', 'how', 'any', 'many', 'much', 'not', 'but', 'so', 'as',
+      'or', 'nor', 'yet', 'still', 'well', 'back', 'even', 'ever',
+      'never', 'always', 'often', 'sometimes', 'usually', 'however',
+      'therefore', 'thus', 'hence', 'indeed', 'rather', 'whether',
+      'either', 'neither', 'although', 'unless', 'until', 'whereas'
+    ];
+    
     words.forEach(word => {
+      // Clean the word
+      const cleanWord = word.toLowerCase().replace(/[^a-z]/g, '');
+      
+      // Skip if in exclusion list
+      if (excludedWords.includes(cleanWord)) {
+        return;
+      }
+      
       // Look for words that are at least 5 characters and might be medicine names
-      if (word.length >= 5 && /^[a-z]+$/.test(word)) {
-        medicines.push({
-          name: word,
-          strength: '',
-          dosage: '',
-          duration: '',
-          notes: '',
-          rawLine: word
-        });
+      if (cleanWord.length >= 5 && /^[a-z]+$/.test(cleanWord)) {
+        // Additional check: word should look like a medicine name
+        const looksLikeMedicine = /[ptmcl]{2,}/i.test(cleanWord) || 
+                                  /(ol|in|al|ic|us|a|ine|on)$/i.test(cleanWord) ||
+                                  cleanWord.length >= 7;
+        
+        if (looksLikeMedicine) {
+          medicines.push({
+            name: cleanWord,
+            strength: '',
+            dosage: '',
+            duration: '',
+            notes: '',
+            rawLine: word
+          });
+        }
       }
     });
   }
