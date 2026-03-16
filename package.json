@@ -3,15 +3,8 @@
   "version": "1.0.0",
   "description": "Online Medical Store - Monorepo with frontend and backend",
   "scripts": {
-    "build": "cd online_frontend && npm run build",
+    "build": "cd online_frontend && npm install && npm run build",
     "start": "cd online_frontend && npm start",
     "test": "cd online_frontend && npm test"
-  },
-  "workspaces": [
-    "online_frontend",
-    "online_backend"
-  ],
-  "dependencies": {
-    "react-scripts": "^5.0.1"
   }
 }
