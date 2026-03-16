@@ -6,9 +6,9 @@ const { initFirebaseAdmin } = require('../config/firebaseAdmin');
 const MOCK_MEDICINES = [
   {
     id: 'med1',
-    name: 'Tr Bellidopnas Me',
+    name: 'Tr Belladonna',
     genericName: 'Belladonna',
-    strength: '5me',
+    strength: '15ml',
     price: 185,
     stockQuantity: 50,
     category: 'Tincture',
@@ -18,7 +18,7 @@ const MOCK_MEDICINES = [
     id: 'med1b',
     name: 'Belladonna Tincture (Tr Belladonna)',
     genericName: 'Belladonna',
-    strength: '5ml',
+    strength: '15ml',
     price: 185,
     stockQuantity: 50,
     category: 'Tincture',
@@ -26,8 +26,8 @@ const MOCK_MEDICINES = [
   },
   {
     id: 'med2',
-    name: 'Ampteoget Goed',
-    genericName: 'Ampteoget',
+    name: 'Amphogel Good',
+    genericName: 'Amphogel',
     strength: '120ml',
     price: 850,
     stockQuantity: 30,

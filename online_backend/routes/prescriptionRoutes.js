@@ -123,6 +123,18 @@ router.get('/debug-list', async (req, res) => {
 // POST /api/prescriptions/process - Process prescription with OCR
 router.post('/process', upload.single('file'), processPrescription);
 
+// POST /api/prescriptions/ocr-debug - Return raw OCR text only (for debugging)
+router.post('/ocr-debug', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file provided' });
+    const { extractTextFromImage } = require('../services/ocrService');
+    const rawText = await extractTextFromImage(req.file.buffer);
+    return res.json({ rawText, length: rawText.length });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/prescriptions/corrections - Save user correction for learning
 router.post('/corrections', savePrescriptionCorrection);
 

@@ -95,13 +95,17 @@ const PrescriptionScanner = ({ onComplete }) => {
       }
 
       if (result.success) {
-        setRawOcrText(result.data.rawText);
-        setMatchedMedicines(result.data.matchedMedicines || []);
+        setRawOcrText(result.data.rawText || '');
+        const allMatches = result.data.matchedMedicines || [];
+        setMatchedMedicines(allMatches);
         
-        if (result.data.matchedMedicines.length === 0) {
+        const successfulMatches = allMatches.filter(m => m.matched);
+        if (allMatches.length === 0) {
           setError('No medicines detected in the prescription. Please try a clearer image.');
+        } else if (successfulMatches.length === 0) {
+          setError('Medicines were detected in the text but could not be matched to our database. Try a clearer image or check the raw OCR output below.');
         } else {
-          setSuccess(`Successfully detected ${result.data.matchedMedicines.length} medicine(s)`);
+          setSuccess(`Successfully detected ${successfulMatches.length} medicine(s)`);
         }
       }
     } catch (err) {
@@ -394,7 +398,7 @@ const PrescriptionScanner = ({ onComplete }) => {
           </div>
 
           {/* Raw OCR Output */}
-          {rawOcrText && (
+          {(rawOcrText || matchedMedicines.length > 0) && (
             <div className="bg-white rounded-lg shadow-lg p-6">
               <h3 className="text-lg font-semibold mb-3 text-gray-800 flex items-center">
                 <svg
@@ -412,7 +416,7 @@ const PrescriptionScanner = ({ onComplete }) => {
               </h3>
               <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto">
                 <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
-                  {rawOcrText}
+                  {rawOcrText || '(No text extracted from image)'}
                 </pre>
               </div>
             </div>
