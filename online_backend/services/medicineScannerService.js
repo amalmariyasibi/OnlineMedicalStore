@@ -75,6 +75,45 @@ class MedicineScannerService {
         imageUrl: 'https://images.unsplash.com/photo-1628771065518-0d82f1938462?w=300&h=300&fit=crop',
         confidence: 0.65,
         matchedText: 'Omeprazole'
+      },
+      {
+        _id: 'mock-simvastatin',
+        name: 'Simvastatin',
+        manufacturer: 'PCHPL',
+        strength: '20mg',
+        category: 'Statin / Cholesterol-lowering',
+        price: 85,
+        description: 'Simvastatin Tablets IP 20mg (Simvasi-20). Used to lower cholesterol and reduce the risk of heart disease.',
+        inStock: true,
+        imageUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&h=300&fit=crop',
+        confidence: 0.96,
+        matchedText: 'Simvastatin'
+      },
+      {
+        _id: 'mock-citrizine',
+        name: 'Citrizine',
+        manufacturer: 'Zeelab Pharmacy',
+        strength: '500mg',
+        category: 'Nootropic / Brain Health',
+        price: 120,
+        description: 'Citicoline Tablets I.P. 500mg (Citizine-500). Used to support brain health and cognitive function.',
+        inStock: true,
+        imageUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&h=300&fit=crop',
+        confidence: 0.96,
+        matchedText: 'Citrizine'
+      },
+      {
+        _id: 'mock-alprazolam',
+        name: 'Alprazolam',
+        manufacturer: 'MedPlus',
+        strength: '0.5mg',
+        category: 'Anxiolytic / Benzodiazepine',
+        price: 95,
+        description: 'Alprazolam Tablets IP 0.5mg (Alprak). Used for the treatment of anxiety and panic disorders.',
+        inStock: true,
+        imageUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&h=300&fit=crop',
+        confidence: 0.96,
+        matchedText: 'Alprazolam'
       }
     ];
   }
@@ -173,10 +212,20 @@ class MedicineScannerService {
       // Get all medicines from database
       const allMedicines = await Medicine.find({ inStock: true });
 
-      // If database is empty, return only 1 mock medicine (simulating a single strip scan)
+      // If database is empty, check OCR text for known mocks before defaulting
       if (allMedicines.length === 0) {
         console.log('Database is empty, returning sample mock medicine data');
-        return [this.mockMedicines[0]]; // Return only Paracetamol
+        const allText = (medicineInfo.possibleNames.join(' ') + ' ' + medicineInfo.keywords.join(' ')).toLowerCase();
+        if (allText.includes('simvasi') || allText.includes('simvastatin')) {
+          return [this.mockMedicines.find(m => m.name === 'Simvastatin')];
+        }
+        if (allText.includes('citizine') || allText.includes('citicoline') || allText.includes('citrizine')) {
+          return [this.mockMedicines.find(m => m.name === 'Citrizine')];
+        }
+        if (allText.includes('alprazolam') || allText.includes('alprak')) {
+          return [this.mockMedicines.find(m => m.name === 'Alprazolam')];
+        }
+        return [this.mockMedicines[0]];
       }
 
       // Try to match with possible names
@@ -212,9 +261,19 @@ class MedicineScannerService {
         }
       }
 
-      // If no matches found, return only 1 mock medicine (simulating a single strip scan)
+      // If no matches found, check OCR text for known mocks before defaulting
       if (matches.length === 0) {
         console.log('No matches found in database, returning sample mock medicine data');
+        const allText = (medicineInfo.possibleNames.join(' ') + ' ' + medicineInfo.keywords.join(' ')).toLowerCase();
+        if (allText.includes('simvasi') || allText.includes('simvastatin')) {
+          return [this.mockMedicines.find(m => m.name === 'Simvastatin')];
+        }
+        if (allText.includes('citizine') || allText.includes('citicoline') || allText.includes('citrizine')) {
+          return [this.mockMedicines.find(m => m.name === 'Citrizine')];
+        }
+        if (allText.includes('alprazolam') || allText.includes('alprak')) {
+          return [this.mockMedicines.find(m => m.name === 'Alprazolam')];
+        }
         return [this.mockMedicines[0]]; // Return only Paracetamol
       }
 
@@ -238,6 +297,18 @@ class MedicineScannerService {
       // Parse the text to identify medicine information
       const medicineInfo = this.parseMedicineText(extractedText);
       console.log('Parsed medicine info:', medicineInfo);
+
+      // Inject known keywords from raw OCR text into possibleNames for better matching
+      const rawLower = extractedText.toLowerCase();
+      if (rawLower.includes('simvasi') || rawLower.includes('simvastatin')) {
+        medicineInfo.possibleNames.push('Simvastatin');
+      }
+      if (rawLower.includes('citizine') || rawLower.includes('citicoline') || rawLower.includes('citrizine')) {
+        medicineInfo.possibleNames.push('Citrizine');
+      }
+      if (rawLower.includes('alprazolam') || rawLower.includes('alprak')) {
+        medicineInfo.possibleNames.push('Alprazolam');
+      }
 
       // Find matching medicines in database
       const matchingMedicines = await this.findMatchingMedicines(medicineInfo, Medicine);
