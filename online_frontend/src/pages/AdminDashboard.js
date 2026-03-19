@@ -113,74 +113,95 @@ function AdminDashboard() {
   const generateReport = useCallback(async () => {
     setLoadingReport(true);
     setError("");
-    
+
     try {
-      // In a real application, this would fetch data from the backend
-      // For now, we'll generate mock data
-      
-      // Get date range based on period
       const today = new Date();
-      let startDate = new Date();
-      
-      switch (reportPeriod) {
-        case "week":
-          startDate.setDate(today.getDate() - 7);
-          break;
-        case "month":
-          startDate.setMonth(today.getMonth() - 1);
-          break;
-        case "quarter":
-          startDate.setMonth(today.getMonth() - 3);
-          break;
-        case "year":
-          startDate.setFullYear(today.getFullYear() - 1);
-          break;
-        default:
-          startDate.setDate(today.getDate() - 7);
+      const currency = "₹";
+
+      // Helper to generate past dates
+      const pastDate = (daysAgo) => {
+        const d = new Date(today);
+        d.setDate(d.getDate() - daysAgo);
+        return d;
+      };
+
+      const periodDays = { week: 7, month: 30, quarter: 90, year: 365 }[reportPeriod] || 30;
+
+      // Build mock data per report type
+      let data = null;
+
+      if (reportType === "sales") {
+        const step = Math.max(1, Math.floor(periodDays / 10));
+        const salesData = [];
+        for (let i = periodDays; i >= 0; i -= step) {
+          salesData.push({
+            date: pastDate(i),
+            amount: Math.floor(Math.random() * 18000) + 4000,
+          });
+        }
+        const totalSales = salesData.reduce((s, d) => s + d.amount, 0);
+        data = {
+          salesData,
+          totalSales,
+          avgDailySales: totalSales / periodDays,
+          currency,
+          growth: (Math.random() * 20 - 5).toFixed(1),
+        };
+      } else if (reportType === "orders") {
+        const statuses = [
+          { status: "pending", count: Math.floor(Math.random() * 40) + 10 },
+          { status: "processing", count: Math.floor(Math.random() * 30) + 5 },
+          { status: "shipped", count: Math.floor(Math.random() * 50) + 20 },
+          { status: "delivered", count: Math.floor(Math.random() * 120) + 60 },
+          { status: "cancelled", count: Math.floor(Math.random() * 15) + 2 },
+        ];
+        data = {
+          orderStatusData: statuses,
+          totalOrders: statuses.reduce((s, d) => s + d.count, 0),
+          currency,
+        };
+      } else if (reportType === "products") {
+        data = {
+          topProducts: [
+            { name: "Paracetamol 500mg", sales: 312, revenue: 9360, stock: 480 },
+            { name: "Amoxicillin 250mg", sales: 278, revenue: 27800, stock: 210 },
+            { name: "Vitamin C 1000mg", sales: 245, revenue: 12250, stock: 560 },
+            { name: "Omeprazole 20mg", sales: 198, revenue: 15840, stock: 320 },
+            { name: "Cetirizine 10mg", sales: 176, revenue: 7040, stock: 415 },
+            { name: "Metformin 500mg", sales: 154, revenue: 9240, stock: 290 },
+            { name: "Atorvastatin 10mg", sales: 143, revenue: 17160, stock: 175 },
+            { name: "Azithromycin 500mg", sales: 132, revenue: 19800, stock: 140 },
+          ],
+          currency,
+        };
+      } else if (reportType === "customers") {
+        data = {
+          customerData: [
+            { metric: "New Customers", count: Math.floor(Math.random() * 80) + 30 },
+            { metric: "Returning Customers", count: Math.floor(Math.random() * 120) + 50 },
+            { metric: "Total Orders Placed", count: Math.floor(Math.random() * 300) + 100 },
+            { metric: "Avg. Order Value", value: (Math.random() * 800 + 400).toFixed(2) },
+            { metric: "Prescription Uploads", count: Math.floor(Math.random() * 60) + 20 },
+            { metric: "Customer Retention Rate", percentage: (Math.random() * 30 + 55).toFixed(1) },
+          ],
+          currency,
+          topCustomers: [
+            { name: "Rahul Sharma", orders: 18, spent: 24600 },
+            { name: "Priya Nair", orders: 14, spent: 19800 },
+            { name: "Amit Verma", orders: 12, spent: 17200 },
+            { name: "Sneha Patel", orders: 11, spent: 15400 },
+            { name: "Kiran Reddy", orders: 9, spent: 12900 },
+          ],
+        };
       }
-      
-      // Filter orders based on date range and report type
-      const filteredOrders = orders.filter(order => {
-        const orderDate = new Date(order.createdAt);
-        return orderDate >= startDate && orderDate <= today;
-      });
-      
-      // Generate report data based on type
-      let reportData = [];
-      
-      switch (reportType) {
-        case "sales":
-          // Calculate total sales
-          const totalSales = filteredOrders.reduce((sum, order) => sum + parseFloat(order.totalPrice || 0), 0);
-          reportData = [{ name: "Total Sales", value: totalSales.toFixed(2) }];
-          break;
-        case "orders":
-          // Count orders by status
-          const statusCount = filteredOrders.reduce((acc, order) => {
-            acc[order.status] = (acc[order.status] || 0) + 1;
-            return acc;
-          }, {});
-          reportData = Object.entries(statusCount).map(([status, count]) => ({
-            name: status,
-            value: count
-          }));
-          break;
-        case "customers":
-          // Count unique customers
-          const uniqueCustomers = [...new Set(filteredOrders.map(order => order.userId))];
-          reportData = [{ name: "Unique Customers", value: uniqueCustomers.length }];
-          break;
-        default:
-          reportData = [];
-      }
-      
-      setReportData(reportData);
+
+      setReportData(data);
     } catch (err) {
       setError(err.message || "An error occurred while generating report");
     } finally {
       setLoadingReport(false);
     }
-  }, [reportPeriod, reportType, orders]);
+  }, [reportPeriod, reportType]);
 
   // ===== END UTILITY FUNCTIONS =====
 
@@ -1274,9 +1295,15 @@ function AdminDashboard() {
       case "reports":
         return (
           <div className="space-y-6">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">Reports & Analytics</h3>
-              <p className="mt-1 max-w-2xl text-sm text-gray-500">Generate and view reports</p>
+            <div className="px-6 py-5 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Reports & Analytics</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Mock data — switch report type or period to refresh</p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                Live Preview
+              </span>
             </div>
             
             {error && (
@@ -1292,210 +1319,323 @@ function AdminDashboard() {
             )}
             
             <div className="px-6 py-4">
-              <div className="flex flex-col md:flex-row justify-between mb-4 space-y-2 md:space-y-0">
-                <div className="w-full md:w-1/3">
-                  <select
-                    value={reportType}
-                    onChange={(e) => setReportType(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="sales">Sales Report</option>
-                    <option value="orders">Order Status Report</option>
-                    <option value="products">Top Selling Products</option>
-                    <option value="customers">Customer Activity</option>
-                  </select>
-                </div>
-                
-                <div className="w-full md:w-2/3 flex justify-end space-x-2">
-                  <select
-                    value={reportPeriod}
-                    onChange={(e) => setReportPeriod(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="week">Last Week</option>
-                    <option value="month">Last Month</option>
-                    <option value="quarter">Last Quarter</option>
-                    <option value="year">Last Year</option>
-                  </select>
-                </div>
+              {/* Filter bar */}
+              <div className="flex flex-col md:flex-row gap-3 mb-6">
+                <select
+                  value={reportType}
+                  onChange={(e) => setReportType(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium text-gray-700"
+                >
+                  <option value="sales">Sales Report</option>
+                  <option value="orders">Order Status Report</option>
+                  <option value="products">Top Selling Products</option>
+                  <option value="customers">Customer Activity</option>
+                </select>
+                <select
+                  value={reportPeriod}
+                  onChange={(e) => setReportPeriod(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium text-gray-700"
+                >
+                  <option value="week">Last Week</option>
+                  <option value="month">Last Month</option>
+                  <option value="quarter">Last Quarter</option>
+                  <option value="year">Last Year</option>
+                </select>
               </div>
               
               {loadingReport ? (
-                <div className="text-center py-8">
+                <div className="flex justify-center items-center py-16">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
                 </div>
+              ) : reportData ? (
+                <div>
+                  {/* ── SALES REPORT ── */}
+                  {reportType === "sales" && reportData.salesData && (
+                    <div>
+                      {/* KPI cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl p-5 shadow">
+                          <p className="text-xs uppercase tracking-wide opacity-80 mb-1">Total Revenue</p>
+                          <p className="text-2xl font-bold">{reportData.currency}{reportData.totalSales?.toLocaleString()}</p>
+                          <p className="text-xs mt-1 opacity-75">
+                            {parseFloat(reportData.growth) >= 0 ? "▲" : "▼"} {Math.abs(reportData.growth)}% vs previous period
+                          </p>
+                        </div>
+                        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl p-5 shadow">
+                          <p className="text-xs uppercase tracking-wide opacity-80 mb-1">Avg Daily Sales</p>
+                          <p className="text-2xl font-bold">{reportData.currency}{reportData.avgDailySales?.toFixed(0)}</p>
+                          <p className="text-xs mt-1 opacity-75">Per day average</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl p-5 shadow">
+                          <p className="text-xs uppercase tracking-wide opacity-80 mb-1">Data Points</p>
+                          <p className="text-2xl font-bold">{reportData.salesData.length}</p>
+                          <p className="text-xs mt-1 opacity-75">Days tracked</p>
+                        </div>
+                      </div>
+                      {/* Bar chart (CSS-based) */}
+                      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+                        <p className="text-sm font-semibold text-gray-700 mb-4">Daily Revenue</p>
+                        <div className="flex items-end gap-1 h-32 overflow-x-auto pb-2">
+                          {reportData.salesData.map((item, i) => {
+                            const max = Math.max(...reportData.salesData.map(d => d.amount));
+                            const pct = Math.round((item.amount / max) * 100);
+                            return (
+                              <div key={i} className="flex flex-col items-center flex-1 min-w-[28px] group relative">
+                                <div
+                                  className="w-full bg-blue-400 hover:bg-blue-600 rounded-t transition-all cursor-pointer"
+                                  style={{ height: `${pct}%` }}
+                                  title={`${reportData.currency}${item.amount?.toLocaleString()}`}
+                                ></div>
+                                <span className="text-xs text-gray-400 mt-1 hidden group-hover:block absolute -bottom-5 whitespace-nowrap">
+                                  {new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {/* Table */}
+                      <div className="overflow-x-auto rounded-xl border border-gray-200">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sales Amount</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Share</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-100">
+                            {reportData.salesData.map((item, index) => {
+                              const pct = ((item.amount / reportData.totalSales) * 100).toFixed(1);
+                              return (
+                                <tr key={index} className="hover:bg-gray-50 transition-colors">
+                                  <td className="px-6 py-3 text-sm text-gray-400">{index + 1}</td>
+                                  <td className="px-6 py-3 text-sm text-gray-800">
+                                    {new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                  </td>
+                                  <td className="px-6 py-3 text-sm font-medium text-gray-900">{reportData.currency}{item.amount?.toLocaleString()}</td>
+                                  <td className="px-6 py-3 text-sm text-gray-500">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-20 bg-gray-200 rounded-full h-1.5">
+                                        <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${pct}%` }}></div>
+                                      </div>
+                                      <span>{pct}%</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── ORDER STATUS REPORT ── */}
+                  {reportType === "orders" && reportData.orderStatusData && (
+                    <div>
+                      {/* KPI cards */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl p-4 shadow col-span-2 sm:col-span-1">
+                          <p className="text-xs uppercase opacity-80 mb-1">Total Orders</p>
+                          <p className="text-2xl font-bold">{reportData.totalOrders?.toLocaleString()}</p>
+                        </div>
+                        {reportData.orderStatusData.map((item, i) => {
+                          const colors = {
+                            pending: "from-yellow-400 to-yellow-500",
+                            processing: "from-orange-400 to-orange-500",
+                            shipped: "from-indigo-400 to-indigo-500",
+                            delivered: "from-green-400 to-green-500",
+                            cancelled: "from-red-400 to-red-500",
+                          };
+                          const bg = colors[item.status] || "from-gray-400 to-gray-500";
+                          return (
+                            <div key={i} className={`bg-gradient-to-br ${bg} text-white rounded-xl p-4 shadow`}>
+                              <p className="text-xs uppercase opacity-80 mb-1 capitalize">{item.status}</p>
+                              <p className="text-2xl font-bold">{item.count}</p>
+                              <p className="text-xs opacity-75">{((item.count / reportData.totalOrders) * 100).toFixed(0)}%</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Horizontal bar chart */}
+                      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+                        <p className="text-sm font-semibold text-gray-700 mb-4">Order Distribution</p>
+                        <div className="space-y-3">
+                          {reportData.orderStatusData.map((item, i) => {
+                            const pct = ((item.count / reportData.totalOrders) * 100).toFixed(1);
+                            const barColors = ["bg-yellow-400", "bg-orange-400", "bg-indigo-400", "bg-green-400", "bg-red-400"];
+                            return (
+                              <div key={i} className="flex items-center gap-3">
+                                <span className="w-24 text-sm text-gray-600 capitalize text-right">{item.status}</span>
+                                <div className="flex-1 bg-gray-100 rounded-full h-4">
+                                  <div
+                                    className={`${barColors[i % barColors.length]} h-4 rounded-full transition-all`}
+                                    style={{ width: `${pct}%` }}
+                                  ></div>
+                                </div>
+                                <span className="w-16 text-sm text-gray-700 font-medium">{item.count} ({pct}%)</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {/* Table */}
+                      <div className="overflow-x-auto rounded-xl border border-gray-200">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Count</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">% of Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-100">
+                            {reportData.orderStatusData.map((item, index) => {
+                              const badges = {
+                                pending: "bg-yellow-100 text-yellow-800",
+                                processing: "bg-orange-100 text-orange-800",
+                                shipped: "bg-indigo-100 text-indigo-800",
+                                delivered: "bg-green-100 text-green-800",
+                                cancelled: "bg-red-100 text-red-800",
+                              };
+                              return (
+                                <tr key={index} className="hover:bg-gray-50 transition-colors">
+                                  <td className="px-6 py-3">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold capitalize ${badges[item.status] || "bg-gray-100 text-gray-700"}`}>
+                                      {item.status}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-3 text-sm font-medium text-gray-900">{item.count}</td>
+                                  <td className="px-6 py-3 text-sm text-gray-500">{((item.count / reportData.totalOrders) * 100).toFixed(1)}%</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── TOP SELLING PRODUCTS ── */}
+                  {reportType === "products" && reportData.topProducts && (
+                    <div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                        <div className="bg-gradient-to-br from-teal-500 to-teal-600 text-white rounded-xl p-5 shadow">
+                          <p className="text-xs uppercase opacity-80 mb-1">Top Product</p>
+                          <p className="text-lg font-bold">{reportData.topProducts[0]?.name}</p>
+                          <p className="text-xs opacity-75">{reportData.topProducts[0]?.sales} units sold</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 text-white rounded-xl p-5 shadow">
+                          <p className="text-xs uppercase opacity-80 mb-1">Total Units Sold</p>
+                          <p className="text-2xl font-bold">{reportData.topProducts.reduce((s, p) => s + p.sales, 0).toLocaleString()}</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-sky-500 to-sky-600 text-white rounded-xl p-5 shadow">
+                          <p className="text-xs uppercase opacity-80 mb-1">Total Revenue</p>
+                          <p className="text-2xl font-bold">{reportData.currency}{reportData.topProducts.reduce((s, p) => s + p.revenue, 0).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <div className="overflow-x-auto rounded-xl border border-gray-200">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Rank</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Product Name</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Units Sold</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Revenue</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Stock Left</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-100">
+                            {reportData.topProducts.map((item, index) => (
+                              <tr key={index} className="hover:bg-gray-50 transition-colors">
+                                <td className="px-6 py-3">
+                                  <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${index === 0 ? "bg-yellow-100 text-yellow-700" : index === 1 ? "bg-gray-200 text-gray-700" : index === 2 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-500"}`}>
+                                    {index + 1}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-3 text-sm font-medium text-gray-900">{item.name}</td>
+                                <td className="px-6 py-3 text-sm text-gray-700">{item.sales}</td>
+                                <td className="px-6 py-3 text-sm font-medium text-green-700">{reportData.currency}{item.revenue?.toLocaleString()}</td>
+                                <td className="px-6 py-3 text-sm text-gray-500">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${item.stock < 150 ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                                    {item.stock} units
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── CUSTOMER ACTIVITY ── */}
+                  {reportType === "customers" && reportData.customerData && (
+                    <div>
+                      {/* Metric cards */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+                        {reportData.customerData.map((item, i) => {
+                          const gradients = [
+                            "from-violet-500 to-violet-600",
+                            "from-pink-500 to-pink-600",
+                            "from-rose-500 to-rose-600",
+                            "from-amber-500 to-amber-600",
+                            "from-lime-500 to-lime-600",
+                            "from-emerald-500 to-emerald-600",
+                          ];
+                          const val = item.count !== undefined ? item.count
+                            : item.value !== undefined ? `${reportData.currency}${item.value}`
+                            : item.percentage !== undefined ? `${item.percentage}%` : "—";
+                          return (
+                            <div key={i} className={`bg-gradient-to-br ${gradients[i % gradients.length]} text-white rounded-xl p-5 shadow`}>
+                              <p className="text-xs uppercase opacity-80 mb-1">{item.metric}</p>
+                              <p className="text-2xl font-bold">{val}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Top customers table */}
+                      <div className="overflow-x-auto rounded-xl border border-gray-200">
+                        <p className="px-6 py-3 text-sm font-semibold text-gray-700 bg-gray-50 border-b border-gray-200">Top Customers</p>
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Customer</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Orders</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Total Spent</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-100">
+                            {reportData.topCustomers?.map((c, i) => (
+                              <tr key={i} className="hover:bg-gray-50 transition-colors">
+                                <td className="px-6 py-3 text-sm text-gray-400">{i + 1}</td>
+                                <td className="px-6 py-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-sm font-bold">
+                                      {c.name.charAt(0)}
+                                    </div>
+                                    <span className="text-sm font-medium text-gray-900">{c.name}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-3 text-sm text-gray-700">{c.orders}</td>
+                                <td className="px-6 py-3 text-sm font-medium text-green-700">{reportData.currency}{c.spent?.toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
-                <div className="overflow-x-auto">
-                  {/* Render different report views based on report type */}
-                  {reportType === "sales" && reportData?.salesData && (
-                    <div>
-                      <h4 className="text-md font-medium text-gray-900 mb-4">Sales Report</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        <div className="bg-blue-50 p-4 rounded-lg">
-                          <p className="text-sm text-gray-600">Total Sales</p>
-                          <p className="text-xl font-bold text-blue-700">{reportData.currency}{reportData.totalSales?.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-green-50 p-4 rounded-lg">
-                          <p className="text-sm text-gray-600">Average Daily Sales</p>
-                          <p className="text-xl font-bold text-green-700">{reportData.currency}{reportData.avgDailySales?.toFixed(2)}</p>
-                        </div>
-                        <div className="bg-purple-50 p-4 rounded-lg">
-                          <p className="text-sm text-gray-600">Days</p>
-                          <p className="text-xl font-bold text-purple-700">{reportData.salesData.length}</p>
-                        </div>
-                      </div>
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Date
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Sales Amount
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {reportData.salesData.map((item, index) => (
-                            <tr key={index}>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">
-                                  {item.date instanceof Date ? item.date.toLocaleDateString() : new Date(item.date).toLocaleDateString()}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">
-                                  {reportData.currency}{item.amount?.toLocaleString()}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  
-                  {reportType === "orders" && reportData?.orderStatusData && (
-                    <div>
-                      <h4 className="text-md font-medium text-gray-900 mb-4">Order Status Report</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-                        <div className="bg-blue-50 p-4 rounded-lg">
-                          <p className="text-sm text-gray-600">Total Orders</p>
-                          <p className="text-xl font-bold text-blue-700">{reportData.totalOrders?.toLocaleString()}</p>
-                        </div>
-                        {reportData.orderStatusData.map((item, index) => (
-                          <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                            <p className="text-sm text-gray-600 capitalize">{item.status}</p>
-                            <p className="text-xl font-bold text-gray-700">{item.count}</p>
-                          </div>
-                        ))}
-                      </div>
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Status
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Count
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {reportData.orderStatusData.map((item, index) => (
-                            <tr key={index}>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900 capitalize">
-                                  {item.status}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">
-                                  {item.count}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  
-                  {reportType === "products" && reportData?.topProducts && (
-                    <div>
-                      <h4 className="text-md font-medium text-gray-900 mb-4">Top Selling Products</h4>
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Product Name
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Sales Count
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {reportData.topProducts.map((item, index) => (
-                            <tr key={index}>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">
-                                  {item.name}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">
-                                  {item.sales}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  
-                  {reportType === "customers" && reportData?.customerData && (
-                    <div>
-                      <h4 className="text-md font-medium text-gray-900 mb-4">Customer Activity</h4>
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Metric
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Value
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {reportData.customerData.map((item, index) => (
-                            <tr key={index}>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">
-                                  {item.metric}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">
-                                  {item.count !== undefined ? item.count : 
-                                   item.value !== undefined ? `${reportData.currency || '₹'}${item.value}` : 
-                                   item.percentage !== undefined ? `${item.percentage}%` : 'N/A'}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  
-                  {!reportData && (
-                    <div className="text-center py-8">
-                      <p className="text-sm text-gray-500">No data available</p>
-                    </div>
-                  )}
+                <div className="text-center py-16 text-gray-400">
+                  <svg className="mx-auto mb-3 w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                  </svg>
+                  <p className="text-sm">No data available. Select a report type and period above.</p>
                 </div>
               )}
             </div>
